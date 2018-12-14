@@ -1,0 +1,519 @@
+---
+title: "Untitled"
+author: "SS"
+date: "September 27, 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r load_libraries}
+library(MASS)
+library(audio)
+library(sp)
+library(foreign)
+library(rgdal)
+library(maptools)
+library(rgeos)
+library(doParallel)
+library(rasterVis)
+library(dismo)
+library(plotKML)
+library(SDMTools)
+library(PBSmapping)
+library(lme4)
+library(blme)
+library(raster)
+library(fields)
+library(RColorBrewer)
+library(sjmisc)
+library(ncdf4)
+library(knitr)
+library(runjags)
+###################################################################
+#Load packages and library files
+library(lattice)  #Needed for data exploration
+library(mgcv)  # Needed for data exploration
+#library(coefplot2)# Needed for glm/JAGS comp
+library(coefplot) # coefplot2 would not load in this version of R so i put in coefplot
+library(R2jags)  # MCMC
+library(ggplot2)
+library(stringr)
+#library(mass)
+library(parallel)
+library(plotrix)
+##################################################################
+
+
+```
+
+#set some initial directories. Later code refers to the name of the directory, rather than the full path, so that when Rob or Shannon runs the code, we only need to change the paths here at the beginning.
+
+main_working_directory="C:/Users/Shannon/Desktop/Ecoregions"
+#main_working_directory="C:/RobsR/Shannon/Bleaching data"
+
+#"graphs_directory"" is for most of the graphs we make. "ecoregion_coefficients_graphs_directory"" is for the maps we make of the coefficients in the ecoregions for multiple variables (there are a lot of graphs for this, so I gave it a separate folder). Rob's is currently set to the same folder as all other figures. 
+graphs_directory="C:/Users/Shannon/Desktop/Ecoregions/output"
+#graphs_directory = "C:/RobsR/Shannon/Bleaching data/Figures"
+ecoregion_coefficients_graphs_directory="C:/Users/Shannon/Desktop/Ecoregions/output"
+#ecoregion_coefficients_graphs_directory= "C:/RobsR/Shannon/Bleaching data/Figures"
+
+#set the ecoregion directory
+ecoregion_polygons_directory="C:/Users/Shannon/Desktop/Ecoregions/ecoregion_exportPolygon"
+ECO<-readOGR(ecoregion_polygons_directory,"ecoregion_exportPolygon")
+#ECO= readOGR("C:/RobsR/Shannon")
+#run ecoregion_outer_rings.Rmd
+ECO<-ecos
+
+setwd(main_working_directory)
+source(file = "HighstatLibV10.R")  
+source(file = "MCMCSupportHighstatV4.R")
+source(file= "MyBUGSOutput.R")
+
+#read in the Bleaching Data
+StudyTitle<-"Reef_Check"
+csv_Title<-paste(StudyTitle, "_with_cortad_variables_with_annual_rate_of_SST_change_20181210.csv", sep="")
+Bleaching_Data_with_cortad_variables<-read.csv(csv_Title, header=TRUE, sep=",")
+
+#rename the "�..Reef.ID" variable to "Site"
+names(Bleaching_Data_with_cortad_variables)[names(Bleaching_Data_with_cortad_variables)=='�..Reef.ID']<-'Site'
+names(Bleaching_Data_with_cortad_variables)[names(Bleaching_Data_with_cortad_variables)=='Reef.ID']<-'Site'
+
+```{r calculate binary bleaching and convert to integers}
+number_of_surveys<-dim(Bleaching_Data_with_cortad_variables)[1]
+Bleaching_Data_with_cortad_variables$binary.bleaching<-Bleaching_Data_with_cortad_variables$Average_bleaching
+binary.bleaching<-array(data=0,dim=number_of_surveys)
+for (i in 1:number_of_surveys)
+{
+  if(Bleaching_Data_with_cortad_variables$Average_bleaching[i]>=1){binary.bleaching[i]=1}
+  Bleaching_Data_with_cortad_variables$Average_bleaching[i]=as.integer(Bleaching_Data_with_cortad_variables$Average_bleaching[i])
+}
+Bleaching_Data_with_cortad_variables$binary.bleaching<-binary.bleaching
+
+```
+
+```{r Data standardization}
+standardize_function<-function(x){
+  x.standardized=(x-mean(na.omit(x)))/sd(na.omit(x))
+  return(x.standardized)
+}
+
+#variables_to_standardize<-c("Temperature_Kelvin", "Depth", "Latitude.Degrees", "Longitude.Degrees", "Windspeed", "SSTA", "SSTA_Maximum", "SSTA_DHW", "SSTA_DHWMax", "SSTA_DHWMean", "SSTA_Frequency", "SSTA_FrequencyMax", "SSTA_FrequencyMean", "TSA", "TSA_Maximum", "TSA_Mean", "TsA_Frequency", "TSA_FrequencyMax", "TSA_FrequencyMean", "TSA_DHW", "TSA_DHWMax", "TSA_DHWMean")
+
+#Diversity
+Bleaching_Data_with_cortad_variables$Diversity.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Diversity)
+
+#Latitude
+#Bleaching_Data_with_cortad_variables$Latitude<-Bleaching_Data_with_cortad_variables$Latitude.Degrees
+Bleaching_Data_with_cortad_variables$Latitude<-abs(Bleaching_Data_with_cortad_variables$Latitude.Degrees)
+Bleaching_Data_with_cortad_variables$Latitude.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Latitude)
+
+#ClimSST
+Bleaching_Data_with_cortad_variables$ClimSST.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$ClimSST)
+
+#Temperature
+Bleaching_Data_with_cortad_variables$Temperature_Kelvin.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Temperature_Kelvin)
+
+#Temperature_Mean
+Bleaching_Data_with_cortad_variables$Temperature_Mean.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Temperature_Mean)
+
+#Temperature_Minimum
+Bleaching_Data_with_cortad_variables$Temperature_Minimum.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Temperature_Minimum)
+
+#Temperature_Maximum
+Bleaching_Data_with_cortad_variables$Temperature_Maximum.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Temperature_Maximum)
+
+#Depth
+Bleaching_Data_with_cortad_variables$Depth.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$Depth)
+
+#Year
+Bleaching_Data_with_cortad_variables$Year.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$Year)
+
+#Latitude
+Bleaching_Data_with_cortad_variables$Latitude.Degrees.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$Latitude.Degrees)
+
+#Longitude
+Bleaching_Data_with_cortad_variables$Longitude.Degrees.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$Longitude.Degrees)
+
+#WindSpeed
+Bleaching_Data_with_cortad_variables$Windspeed.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$Windspeed)
+
+#SSTA
+Bleaching_Data_with_cortad_variables$SSTA.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$SSTA)
+
+#SSTA_Minimum
+Bleaching_Data_with_cortad_variables$SSTA_Minimum.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$SSTA_Minimum)
+
+#SSTA_Maximum
+Bleaching_Data_with_cortad_variables$SSTA_Maximum.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$SSTA_Maximum)
+
+#SSTA_DHW
+Bleaching_Data_with_cortad_variables$SSTA_DHW.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$SSTA_DHW)
+
+#SSTA_DHWMax
+Bleaching_Data_with_cortad_variables$SSTA_DHWMax.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$SSTA_DHWMax)
+
+#SSTA_DHWMean
+Bleaching_Data_with_cortad_variables$SSTA_DHWMean.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$SSTA_DHWMean)
+
+#SSTA_Frequency
+Bleaching_Data_with_cortad_variables$SSTA_Frequency.standardized<-standardize_function(Bleaching_Data_with_cortad_variables$SSTA_Frequency)
+
+#SSTA_FrequencyMax
+Bleaching_Data_with_cortad_variables$SSTA_FrequencyMax.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$SSTA_FrequencyMax)
+
+#SSTA_FrequencyMean
+Bleaching_Data_with_cortad_variables$SSTA_FrequencyMean.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$SSTA_FrequencyMean)
+
+#TSA
+Bleaching_Data_with_cortad_variables$TSA.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA)
+
+#TSA_Minimum
+Bleaching_Data_with_cortad_variables$TSA_Minimum.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_Minimum)
+
+#TSA_Maximum
+Bleaching_Data_with_cortad_variables$TSA_Maximum.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_Maximum)
+
+#TSA_Mean
+Bleaching_Data_with_cortad_variables$TSA_Mean.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_Mean)
+
+#TSA_Frequency
+Bleaching_Data_with_cortad_variables$TSA_Frequency.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_Frequency)
+
+#TSA_FrequencyMax
+Bleaching_Data_with_cortad_variables$TSA_FrequencyMax.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_FrequencyMax)
+
+#TSA_FrequencyMean
+Bleaching_Data_with_cortad_variables$TSA_FrequencyMean.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_FrequencyMean)
+
+#TSA_DHW
+Bleaching_Data_with_cortad_variables$TSA_DHW.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_DHW)
+
+#TSA_DHWMax
+Bleaching_Data_with_cortad_variables$TSA_DHWMax.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_DHWMax)
+
+#TSA_DHWMean
+Bleaching_Data_with_cortad_variables$TSA_DHWMean.standardized<- standardize_function(Bleaching_Data_with_cortad_variables$TSA_DHWMean)
+
+#rate_of_SST_change
+Bleaching_Data_with_cortad_variables$rate_of_SST_change.standardized<- standardize_function(as.numeric(Bleaching_Data_with_cortad_variables$rate_of_SST_change))
+
+```
+
+```{r subset to exclude NA's}
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Average_bleaching))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(ClimSST.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Latitude.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Temperature_Kelvin.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Temperature_Kelvin_Standard_Deviation))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Temperature_Mean.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Temperature_Minimum.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Temperature_Maximum.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Year.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Depth.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Windspeed.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_Minimum.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_Maximum.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_Standard_Deviation))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_Frequency.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_Frequency_Standard_Deviation))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_FrequencyMax.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_FrequencyMean.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_DHW.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_DHWMax.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(SSTA_DHWMean.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_Maximum.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_Minimum.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_Mean.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_Frequency.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_Frequency_Standard_Deviation))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_FrequencyMax.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_FrequencyMean.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_DHW.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_DHWMax.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(TSA_DHWMean.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(rate_of_SST_change.standardized))
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Diversity))
+```
+
+#plot.map function copied from "Map preparation code Chris C.R"
+```{r plotmap_function}
+plot.map<- function(database,center,transf=T,...){
+  Obj <- map(database,...,plot=F)
+  coord <- cbind(Obj[[1]],Obj[[2]])
+  newproj <- "+proj=merc +lon_0=150 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" #utm
+  nextproj<-"+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0" #latlong
+  # split up the coordinates
+  id <- rle(!is.na(coord[,1]))
+  id <- matrix(c(1,cumsum(id$lengths)),ncol=2,byrow=T)
+  polygons <- apply(id,1,function(i){coord[i[1]:i[2],]})
+  
+  # split up polygons that differ too much
+  polygons <- lapply(polygons,function(x){
+    x[,1] <- x[,1] + center
+    x[,1] <- ifelse(x[,1]>180,x[,1]-360,x[,1])
+    if(sum(diff(x[,1])>300,na.rm=T) >0){
+      id <- x[,1] < 0
+      x <- rbind(x[id,],c(NA,NA),x[!id,])
+    }
+    x
+  })
+  # reconstruct the object
+  polygons <- do.call(rbind,polygons)
+  
+  
+  colnames(polygons)<-c("x",'y')
+  polygons<-as.data.frame(polygons)
+  z<-complete.cases(polygons)
+  p<-z
+  z<-cbind(z,z)
+  polygons<-polygons[complete.cases(polygons),]
+  coordinates(polygons)<-~x+y
+  proj4string(polygons)<-CRS(nextproj)
+  if(transf==T){ polygons<-spTransform(polygons,CRS(newproj))}
+  
+  z[p==F,]<-c(NA,NA)
+  z[which(p==T),]<-coordinates(polygons)
+  Obj[[1]] <- z[,1]
+  Obj[[2]] <- z[,2]
+  
+  map(Obj,...)
+}
+```
+
+```{r fit data into ecoregions}
+library(raster)
+
+#plot the ecoregions. use color values between 67 and 137 because there are no white colors in there to be confused with ecoregions that are white because there are empty
+setwd(graphs_directory)
+tiff("Ecoregions.tif",res=300,width=4500,height=1500)
+color_values= runif(length(levels(ECO$Ecoregion)), 67,137)
+plot(ECO, col=color_values)
+plot.map("world", center=0 ,bg="#00000000",ylim=c(-90,90),fill=T,add=T,xlab='longitude',ylab='latitude', col="darkseagreen") #center is still 0
+box()
+dev.off()
+
+
+#get Reef Check and ecoregion data in the same coordinate reference system
+coordinates(Bleaching_Data_with_cortad_variables)<- ~Longitude.Degrees+Latitude.Degrees
+proj4string(Bleaching_Data_with_cortad_variables)<-"+proj=longlat +ellps=WGS84 +datum=WGS84"
+bldata<-spTransform(Bleaching_Data_with_cortad_variables,proj4string(ECO))
+
+#Plot the studies that fall inside an ecoregion
+test=bldata[ECO,]
+#plot(test)
+#plot(ECO, add=T)
+
+#make a list of all the studies that fall in each ecoregion
+test<-over(ECO,bldata,returnList = T)
+
+#get the ecoregion number for each study. NA means the study falls outside all ecoregion areas
+test2<-over(bldata,ECO)
+Bleaching_Data_with_cortad_variables$Region<-as.character(test2$ERG)
+
+for (i in 1:length(Bleaching_Data_with_cortad_variables$Region))
+{
+  if(length(Bleaching_Data_with_cortad_variables$Region)>0){
+    Bleaching_Data_with_cortad_variables$Region[i]= as.numeric(strsplit(Bleaching_Data_with_cortad_variables$Region[i], split="G")[[1]][2])
+  }
+}
+Bleaching_Data_with_cortad_variables$Region<-as.numeric(Bleaching_Data_with_cortad_variables$Region)
+```
+
+#length(levels(Bleaching_Data_with_cortad_variables$Site)) =3694
+#split by Sites, take the average for each site, plot that out and draw ecoregion boundaries
+<!-- lats<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- lons<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- sst_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- tsa_freq_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- ssta_dhw_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- rate_of_sst_change_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- sst_stdev_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- ssta_freq_stdev_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+<!-- ssta_freqmean_per_site<- as.vector(matrix(NA, nrow=3694)) -->
+
+
+<!-- for (site in 1:3694){ -->
+<!--   site_data<-subset(Bleaching_Data_with_cortad_variables,  Bleaching_Data_with_cortad_variables$Site==(levels(Bleaching_Data_with_cortad_variables$Site)[site])) -->
+<!--   lats[site]<-mean(site_data$Latitude.Degrees) -->
+<!--   lons[site]<-mean(site_data$Longitude.Degrees) -->
+<!--   sst_per_site[site]<-mean(site_data$Temperature_Kelvin) -->
+<!--   tsa_freq_per_site[site]<-mean(site_data$TSA_Frequency) -->
+<!--   ssta_dhw_per_site[site]<-mean(site_data$SSTA_DHW) -->
+<!--   rate_of_sst_change_per_site[site]<-mean(site_data$rate_of_SST_change) -->
+<!--   sst_stdev_per_site[site]<-mean(site_data$Temperature_Kelvin_Standard_Deviation) -->
+<!--   ssta_freq_stdev_per_site[site]<-mean(site_data$SSTA_Frequency_Standard_Deviation) -->
+<!--   ssta_freqmean_per_site[site]<-mean(site_data$SSTA_FrequencyMean) -->
+<!-- } -->
+```{ r obtain vectors for each variable describing the ecoregions and write csv}
+
+
+lats<- as.vector(matrix(NA, nrow=150))
+lons<- as.vector(matrix(NA, nrow=150))
+sst_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+tsa_freq_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+ssta_dhw_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+rate_of_sst_change_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+sst_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+ssta_freq_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+ssta_freqmean_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+average_bleaching_mean_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+stdev_bleaching_per_ecoregion<-as.vector(matrix(NA, nrow=150))
+tsa_freq_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+tsa_dhwmean_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+tsa_dhw_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+diversity_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+
+for (eco in 1:150){
+  ecoregion_data<-subset(Bleaching_Data_with_cortad_variables,  Bleaching_Data_with_cortad_variables$Region_number==eco)
+  lats[eco]<-mean(ecoregion_data$Latitude.Degrees)
+  lons[eco]<-mean(ecoregion_data$Longitude.Degrees)
+  sst_per_ecoregion[eco]<-mean(ecoregion_data$Temperature_Kelvin)
+  tsa_freq_per_ecoregion[eco]<-mean(ecoregion_data$TSA_Frequency)
+  ssta_dhw_per_ecoregion[eco]<-mean(ecoregion_data$SSTA_DHW)
+  rate_of_sst_change_per_ecoregion[eco]<-mean(ecoregion_data$rate_of_SST_change)
+  sst_stdev_per_ecoregion[eco]<-mean(ecoregion_data$Temperature_Kelvin_Standard_Deviation)
+  ssta_freq_stdev_per_ecoregion[eco]<-mean(ecoregion_data$SSTA_Frequency_Standard_Deviation)
+  ssta_freqmean_per_ecoregion[eco]<-mean(ecoregion_data$SSTA_FrequencyMean)
+  tsa_freq_stdev_per_ecoregion[eco]<-mean(ecoregion_data$TSA_Frequency_Standard_Deviation)
+  tsa_dhwmean_per_ecoregion[eco]<-mean(ecoregion_data$TSA_DHWMean)
+  tsa_dhw_stdev_per_ecoregion[eco]<-mean(ecoregion_data$TSA_DHW_Standard_Deviation)
+  average_bleaching_mean_per_ecoregion[eco]<- mean(ecoregion_data$Average_bleaching)
+  stdev_bleaching_per_ecoregion[eco]<-sd(ecoregion_data$Average_bleaching)
+  diversity_per_ecoregion[eco]<-mean(ecoregion_data$Diversity)
+}
+
+Veron<-as.vector(seq(from=1, to=150))
+Ecoregion<-as.vector(ECO$Ecoregion)
+ERG<-as.vector(ECO$ERG)
+n<-as.vector(rep(100, times=150))
+samples<-as.vector(rep(NA, times=150))
+
+regions_vector<-as.vector(Bleaching_Data_with_cortad_variables$Region_number)
+regions_vector<-subset(regions_vector, !is.na(regions_vector))
+for (i in 1:150){
+samples[i]<-sum(regions_vector==i)
+}
+
+variables_per_ecoregion<-cbind(Veron=Veron, Ecoregion=Ecoregion, ERG=ERG, n=n, samples=samples, sst_per_ecoregion=sst_per_ecoregion, tsa_freq_per_ecoregion=tsa_freq_per_ecoregion, ssta_dhw_per_ecoregion=ssta_dhw_per_ecoregion, rate_of_sst_change_per_ecoregion=rate_of_sst_change_per_ecoregion, sst_stdev_per_ecoregion=sst_stdev_per_ecoregion, ssta_freq_stdev_per_ecoregion=ssta_freq_stdev_per_ecoregion, ssta_freqmean_per_ecoregion=ssta_freqmean_per_ecoregion, tsa_freq_stdev_per_ecoregion=tsa_freq_stdev_per_ecoregion, tsa_dhwmean_per_ecoregion=tsa_dhwmean_per_ecoregion, tsa_dhw_stdev_per_ecoregion=tsa_dhw_stdev_per_ecoregion, average_bleaching_mean_per_ecoregion=average_bleaching_mean_per_ecoregion, stdev_bleaching_per_ecoregion=stdev_bleaching_per_ecoregion, diversity_per_ecoregion=diversity_per_ecoregion)
+
+variables_per_ecoregion<-subset(variables_per_ecoregion, samples>0)
+#variables_per_ecoregion<-subset(variables_per_ecoregion, !(is.na(sst_per_ecoregion) & is.na(tsa_freq_per_ecoregion) & is.na(ssta_dhw_per_ecoregion) & is.na(ssta_dhw_per_ecoregion) & is.na(rate_of_sst_change_per_ecoregion) & is.na(sst_stdev_per_ecoregion) & is.na(ssta_freqmean_per_ecoregion) & is.na(tsa_freq_stdev_per_ecoregion) & is.na(tsa_dhwmean_per_ecoregion) & is.na(tsa_dhw_stdev_per_ecoregion) & is.na(average_bleaching_mean_per_ecoregion) & is.na(stdev_bleaching_per_ecoregion) & is.na(diversity_per_ecoregion)))
+
+setwd("C:/Users/Shannon/Desktop/Ecoregions")
+write.csv(variables_per_ecoregion, file = "EcoRegions_mean_variables_20181211.csv")
+```
+
+<!-- #OPENBUGS -->
+<!-- library(R2OpenBUGS) -->
+<!-- #Testing model, generate random data -->
+<!-- #x1 <- sample(0:3, 142, replace=T) -->
+<!-- #n <- sample(51:100, 142, replace=T) -->
+<!-- #y1 <- sample(0:1, 142, replace=T) -->
+<!-- #temp<-sample(22:30, 142, replace=T) -->
+
+
+
+<!-- setwd("C:/Users/Shannon/Desktop/Ecoregions") -->
+<!-- #Realdata<- read.csv("EcoRegions_12_16_2014.csv") -->
+<!-- Realdata<- read.csv("EcoRegions_11_21_2018.csv") -->
+<!-- head(Realdata) -->
+<!-- n<-Realdata$n -->
+<!-- #m<-Realdata$Bleach -->
+<!-- m<-as.integer(Realdata$average_bleaching_mean_per_ecoregion) -->
+
+<!-- #temp<- Realdata$sst_per_ecoregion -->
+<!-- #temp<- Realdata$tsa_freq_per_ecoregion -->
+<!-- #temp<- Realdata$ssta_dhw_per_ecoregion -->
+<!-- #temp<- Realdata$rate_of_sst_change_per_ecoregion -->
+<!-- #temp<- Realdata$sst_stdev_per_ecoregion -->
+<!-- #temp<- Realdata$ssta_freq_per_ecoregion -->
+<!-- #temp<- Realdata$ssta_freq_stdev_per_ecoregion -->
+<!-- #temp<- Realdata$ssta_freqmean_per_ecoregion -->
+<!-- #temp<- Realdata$average_bleaching_mean_per_ecoregion -->
+<!-- #temp<- tsa_freq_stdev_per_ecoregion -->
+<!-- #temp<- tsa_dhwmean_per_ecoregion -->
+<!-- temp<- tsa_dhw_stdev_per_ecoregion -->
+
+
+<!-- #77 of the 150 ecoregions have data. the other 73 are empty -->
+<!-- dataA<- list(N=77, m=m, n=n, temp=temp, dt=1) -->
+<!-- params<- c("h", "p", "Beta2", "B") -->
+<!-- model.file<- system.file(package="R2OpenBUGS", "model", "Robs Hazard Sep 28 2018.txt") -->
+<!--  Hazard<- bugs(data=dataA, inits=list(Beta1=c(1)), params, model.file="C:/Users/Shannon/Desktop/Ecoregions/Robs Hazard Sep 28 2018.txt", n.chains=1, -->
+<!--                 n.iter=5000, debug=TRUE, DIC=TRUE, n.burnin=500) -->
+<!-- print(Hazard, digits.summary = 3) -->
+
+
+<!-- ```{r plot number of studies per ecoregion} -->
+
+<!-- #setwd(graphs_directory) -->
+<!-- #tiff(paste("Reef Check number of studies per ecoregion.tif", sep=""),res=300,width=2600,height=1000) -->
+
+<!-- #D=num_studies_in_ecoregion -->
+<!-- D=sst_stdev -->
+<!-- nsteps <- 7; -->
+<!-- step<-(max(na.omit(D))-min(na.omit(D)))/nsteps -->
+<!-- brks<-(min(na.omit(D))+(0:nsteps)*step); -->
+<!-- brks<-c(0,brks) -->
+<!-- #brks[2]<- 1; -->
+<!-- #brks<-c(0,1,100,200,300,400,500,600,700) -->
+<!-- cols <- c(brewer.pal(7, "Reds")) -->
+<!-- grps<-as.ordered(cut(D, brks, include.lowest=TRUE)) -->
+<!-- par(mai=c(.4,0.2,0.2,0.2)) -->
+<!-- plot(x=lons, y=lats, col=cols[unclass(grps)]) -->
+<!-- plot(ECO, add=TRUE) -->
+<!-- box() -->
+
+<!-- library(maps) -->
+<!-- plot.map("world", center=0 , col="darkseagreen1",bg="#00000000",ylim=c(-5500000,5500000),fill=TRUE,mar=c(2,5,2,0),add=T,xlab='longitude',ylab='latitude') #center is still 0 -->
+<!-- axis(1,at=c(-16654136,(-16654136+111319.4*90),(-16654136+111319.4*180),(-16654136+111319.4*270),(-16654136+111319.4*360)),labels=c("",'','','',''), tck = .025,mgp=c(3,.2,0),cex.axis=.65) -->
+<!-- mtext("90", 1, line=-1.3, adj=0.348,cex=.65) -->
+<!-- mtext('270',1,line=-1.3,adj=0.82,cex=.65) -->
+<!-- #mtext("90", 3, line=-1.3, adj=0.335,cex=.65) -->
+<!-- #mtext('270',3,line=-1.3,adj=0.837,cex=.65) -->
+<!-- axis(2,at=c(-1715153*2,-1715153,0,1715153,1715153*2),labels=c('','','','',''), tck = .025,mgp=c(3,.27,0),cex.axis=.65) -->
+<!-- axis(4,at=c(-1715153*2,-1715153,0,1715153,1715153*2),labels=c('','','','',''), tck = .025,mgp=c(3,.27,0),cex.axis=.65) -->
+<!-- mtext("-15", 2, line=-1.2, adj=0.334,cex=.65) -->
+<!-- mtext('15',2,line=-1.2,adj=0.59,cex=.65) -->
+<!-- mtext("-15", 4, line=-1.4, adj=0.334,cex=.65) -->
+<!-- mtext('15',4,line=-1.4,adj=0.59,cex=.65) -->
+<!-- legend("topright",legend=c("0", "1-100", "101-200", "201-300", "301-400", "401-500", "501-600", "601-700"), fill=cols,border = "black", bty="o",bg='white',cex=0.7,y.intersp=0.8) -->
+<!-- dev.off() -->
+
+<!-- # -->
+<!-- # #attempt with ggplot -->
+<!-- # wrld2 <- map_data('world2') -->
+<!-- # -->
+<!-- # data_prez <- num_studies_in_ecoregion -->
+<!-- # pal <- wes_palette(250, name = "Zissou1", type = "continuous") -->
+<!-- # -->
+<!-- # tiff(file='num_studies_per_ecoregion_Sep_20_2018.tif',height=2000,width=4000,res=300) -->
+<!-- # -->
+<!-- # bleach.map <- ggplot() + -->
+<!-- #   geom_polygon(data = wrld2, aes(x=long, y = lat, group = group) -->
+<!-- #                , fill='grey90', col='grey70', size=0.5) + -->
+<!-- #   coord_fixed(ratio=1) + # maintains ratio of x to y in plot regardless of plot size -->
+<!-- #   coord_fixed(ylim=c(-33,35),xlim=c(15,316)) + -->
+<!-- #   # theme_void() + # suppress axes -->
+<!-- #   scale_x_continuous(breaks=c(60,120,180,240,300),labels= c('60°','120°','180°','-120°','-60°'),sec.axis = dup_axis())  + -->
+<!-- #   scale_y_continuous(breaks=c(-25,0,25),labels= c('-23°','0°','23°'),sec.axis = dup_axis())  + -->
+<!-- #   theme(legend.text = element_text(size = 12), legend.title=element_text(size=12), -->
+<!-- #         panel.border = element_rect(colour = "black", fill=NA, size=1), -->
+<!-- #         axis.title.x = element_blank(), axis.title.y = element_blank(), -->
+<!-- #         axis.line.x = element_blank(), axis.line.y = element_blank()) + -->
+<!-- #   panel_border(colour = "black", size = 1, linetype = 1,remove = FALSE) -->
+<!-- # -->
+<!-- # bleach.map + -->
+<!-- #   geom_polygon(data = ECO, aes(x=long, y = lat, group = group) -->
+<!-- #                , fill=num_studies_in_ecoregion, col='grey70', size=0.5) + -->
+<!-- #   #scale_colour_gradientn(colours=c("white", "#3B9AB2", "#78B7C5", "#EBCC2A", "#E1AF00", "#F21A00"), name='Bleaching %', trans='sqrt', -->
+<!-- #   scale_colour_gradientn(colours=c("white", "#3B9AB2", "#78B7C5", "gold", "#E1AF00","darkorange", "#F21A00", "red3", "darkred"), name='Bleaching %', trans='sqrt', -->
+<!-- #                          breaks=c(0,2.2,100,300,500,700), labels=c(0,2.2,100,300,500,700)) -->
+<!-- # -->
+<!-- # dev.off() -->
+<!-- # setwd(main_working_directory) -->
+
+<!-- ``` -->

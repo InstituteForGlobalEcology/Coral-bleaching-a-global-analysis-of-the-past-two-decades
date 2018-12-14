@@ -1,0 +1,117 @@
+---
+title: "Diversity_and_latitude"
+author: "SS"
+date: "December 8, 2018"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+diversity<-read.csv(file=file.path(home,"Coral_diversity_numbers.csv"))
+#read in the Bleaching Data
+StudyTitle<-"Reef_Check"
+csv_Title<-paste(StudyTitle, "_with_cortad_variables_with_annual_rate_of_SST_change.csv", sep="")
+Bleaching_Data_with_cortad_variables<-read.csv(csv_Title, header=TRUE, sep=",")
+
+ECO<- readOGR(file.path(home,'shapefiles','ecoregion_exportPolygon.shp')) # ecoregions
+
+ECO$sp_num<-0
+for(e in 1:(dim(ECO)[1]))
+{
+  if(ECO$ERG[e] %in% diversity$Ecoregion)
+  {
+    ECO$sp_num[e]<-diversity$SpeciesAccepted[ECO$ERG[e]==diversity$Ecoregion]
+  }
+}
+
+#pal <- c( "#3B9AB2","#6BB0C0", "#78B7C5", "gold", "#EBCC2A", "#E1AF00","darkorange", "#F21A00", "darkred")
+D=ECO$sp_num
+brks<-c(0,1,50,100,150,200,300,400,500,600)
+cols <- c("white", brewer.pal(9, "Blues"))
+grps<-as.ordered(cut(D, brks, include.lowest=TRUE))
+
+
+tiff(file=file.path(home,'output','Diversity.tif'),height=800,width=3000,res=300)
+par(mgp=c(0.5,0.6,0), mar=c(1,1,1,1))
+plot(wlrd.p,ylim=c(-4400000,4400000),xlim=c(-2000000,2000000), col='grey90',border='grey70')
+axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60°E','180°','60°W'),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23°N','0°','23°S'),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
+axis(3,at=c(-10018754.17,3339584.724,16697920),lab=c('','',''),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(4, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('','',''),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
+box()
+
+ECO <- spTransform(ECO,CRS("+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+temp <- diversity[with(diversity, order(diversity$SpeciesAccepted)),]
+plot(ECO, col=cols[unclass(grps)], add=T)
+
+#legend
+plotrix::color.legend(9684797.171+25e5,-28*111319.4666666667,15807371.62+25e5,-23.5*111319.4666666667,legend=c(1,100),rect.col=cols,cex=1)
+points(9239521.171+25e5,-25.75*111319.4666666667,lwd=1.5)
+text(9239521.171+25e5,-20.3*111319.4666666667,'0')
+text(((15807371.62+25e5)-(9684797.171+25e5))/2+(9684797.171+25e5),-18*111319.4666666667,"Number of Species")
+dev.off()
+
+
+####################################
+
+library(MASS)
+library(audio)
+library(sp)
+library(foreign)
+library(rgdal)
+library(maptools)
+library(rgeos)
+library(doParallel)
+library(rasterVis)
+library(dismo)
+library(plotKML)
+library(SDMTools)
+library(PBSmapping)
+library(lme4)
+library(blme)
+library(raster)
+library(fields)
+library(RColorBrewer)
+library(sjmisc)
+library(ncdf4)
+library(knitr)
+library(lattice)  #Needed for data exploration
+library(mgcv)  # Needed for data exploration
+library(coefplot) # coefplot2 would not load in this version of R so i put in coefplot
+library(R2jags)  # MCMC
+library(ggplot2)
+library(stringr)
+library(corrplot)
+library(stats)
+
+```{r collinearity}
+Bleaching_Data_with_cortad_variables<-subset(Bleaching_Data_with_cortad_variables, !is.na(Diversity))
+
+Bleaching_Data_with_cortad_variables$Lat<- abs(Bleaching_Data_with_cortad_variables$Latitude.Degrees)
+
+MyVar<-c("Diversity", "Lat")
+#MyVar <- c("Diversity", "ClimSST", "Temperature_Kelvin", "Temperature_Mean", "Temperature_Minimum", "Temperature_Maximum", "Temperature_Kelvin_Standard_Deviation", "Windspeed", "SSTA", "SSTA_Standard_Deviation", "SSTA_Minimum", "SSTA_Maximum", "SSTA_DHW", "SSTA_DHW_Standard_Deviation", "SSTA_DHWMax", "SSTA_DHWMean", "SSTA_Frequency", "SSTA_Frequency_Standard_Deviation", "SSTA_FrequencyMax", "SSTA_FrequencyMean", "TSA", "TSA_Standard_Deviation", "TSA_Minimum", "TSA_Maximum", "TSA_Mean", "TSA_Frequency", "TSA_Frequency_Standard_Deviation", "TSA_FrequencyMax", "TSA_FrequencyMean", "TSA_DHW", "TSA_DHW_Standard_Deviation", "TSA_DHWMax", "TSA_DHWMean")
+
+
+pairs(Bleaching_Data_with_cortad_variables[, MyVar], 
+      lower.panel = panel.cor)
+
+#variance-inflation factors; useful alongside pairplots and scatterplots
+corvif(Bleaching_Data_with_cortad_variables[,MyVar])
+
+Myxyplot(Bleaching_Data_with_cortad_variables, MyVar, "Average_bleaching")
+
+#Zero heavy
+plot(table(Bleaching_Data_with_cortad_variables$Average_bleaching))
+
+library(Hmisc)
+res<- as.matrix(Bleaching_Data_with_cortad_variables[,MyVar])
+res2<-cor(res)
+#colnames(res2)<-c("Diversity", "ClimSST", "SST", "SST_Mean", "SST_Min",  "SST_Max", "SST_stdev", "Windspeed", "SSTA", "SSTA_stdev", "SSTA_Min", "SSTA_Max", "SSTA_DHW", "SSTA_DHW_stdev", "SSTA_DHWMax", "SSTA_DHWMean", "SSTA_Freq", "SSTA_Freq_stdev", "SSTA_FreqMax", "SSTA_FreqMean", "TSA", "TSA_stdev", "TSA_Min", "TSA_Max", "TSA_Mean", "TSA_Freq", "TSA_Freq_stdev", "TSA_FreqMax", "TSA_FreqMean", "TSA_DHW", "TSA_DHW_stdev", "TSA_DHWMax", "TSA_DHWMean")
+#rownames(res2)<-colnames(res2)
+library(corrplot)
+corrplot(res2)
+
+csv_Title<-paste("Corrplot_", StudyTitle, "_with_cortad_variables.csv", sep="")
+write.csv(res2, file = csv_Title)
+```

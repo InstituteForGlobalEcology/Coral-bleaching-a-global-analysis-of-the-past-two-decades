@@ -1,0 +1,880 @@
+---
+title: "Untitled"
+author: "SS"
+date: "December 10, 2018"
+output: html_document
+---
+
+# initialization ----------------------------------------------------------
+library(rgdal)
+library(R2jags)
+library(ggplot2)
+library(RColorBrewer)
+library(plotrix)
+library(GISTools)
+library(R2OpenBUGS)
+
+# import and format data --------------------------------------------------
+# bleaching data
+graphs_directory<-"C:/Users/Shannon/Desktop/Ecoregions/output"
+#graphs_directory="C:/RobsR/Shannon/Bleaching data"
+home <- getwd()
+home<-"C:/Users/Shannon/Desktop/Ecoregions"
+
+ecor.sg <- readOGR(file.path(home,'shapefiles','ecoregion_exportPolygon.shp')) # ecoregions
+
+ecoregion_polygons_directory<-"C:/Users/Shannon/Desktop/Ecoregions/shapefiles"
+ECO<-readOGR(ecoregion_polygons_directory,"ecoregion_exportPolygon")
+
+```{r rings}
+outer_ring_1<-Filter(function(f){f@ringDir==1}, ecor.sg@polygons[[1]]@Polygons)
+outer_bounds_1 = SpatialPolygons(list(Polygons(outer_ring_1,ID=1)))
+
+outer_ring_2<-Filter(function(f){f@ringDir==1}, ecor.sg@polygons[[2]]@Polygons)
+outer_bounds_2 = SpatialPolygons(list(Polygons(outer_ring_2,ID=1)))
+
+rings<-list()
+for (i in 1:150){
+outer_ring<-Filter(function(f){f@ringDir==1}, ecor.sg@polygons[[i]]@Polygons)
+#outer_ring<-Filter(function(f){f@hole==FALSE}, ecor.sg@polygons[[i]]@Polygons)
+  #outer_ring<-ecor.sg@polygons[[i]]@Polygons[[1]]
+rings<-c(rings, outer_ring)
+}
+
+ecos<-SpatialPolygons(list(Polygons(rings[1],ID=1), Polygons(rings[2], ID=2), Polygons(rings[3], ID=3), Polygons(rings[4], ID=4), Polygons(rings[5], ID=5), Polygons(rings[6], ID=6), Polygons(rings[7], ID=7), Polygons(rings[8], ID=8), Polygons(rings[9], ID=9), Polygons(rings[10],ID=10), Polygons(rings[11],ID=11), Polygons(rings[12], ID=12), Polygons(rings[13], ID=13), Polygons(rings[14], ID=14), Polygons(rings[15], ID=15), Polygons(rings[16], ID=16), Polygons(rings[17], ID=17), Polygons(rings[18], ID=18), Polygons(rings[19], ID=19), Polygons(rings[20], ID=20), Polygons(rings[21], ID=21), Polygons(rings[22], ID=22), Polygons(rings[23], ID=23), Polygons(rings[24], ID=24), Polygons(rings[25], ID=25), Polygons(rings[26], ID=26), Polygons(rings[27], ID=27), Polygons(rings[28], ID=28), Polygons(rings[29], ID=29), Polygons(rings[30], ID=30), Polygons(rings[31], ID=31), Polygons(rings[32], ID=32), Polygons(rings[33], ID=33), Polygons(rings[34], ID=34), Polygons(rings[35], ID=35), Polygons(rings[36], ID=36), Polygons(rings[37], ID=37), Polygons(rings[38], ID=38), Polygons(rings[39], ID=39), Polygons(rings[40], ID=40), Polygons(rings[41], ID=41), Polygons(rings[42], ID=42), Polygons(rings[43], ID=43), Polygons(rings[44], ID=44), Polygons(rings[45], ID=45), Polygons(rings[46], ID=46), Polygons(rings[47], ID=47), Polygons(rings[48], ID=48), Polygons(rings[49], ID=49), Polygons(rings[50], ID=50), Polygons(rings[51], ID=51), Polygons(rings[52], ID=52), Polygons(rings[53], ID=53), Polygons(rings[54], ID=54), Polygons(rings[55], ID=55), Polygons(rings[56], ID=56), Polygons(rings[57], ID=57), Polygons(rings[58], ID=58), Polygons(rings[59], ID=59), Polygons(rings[60], ID=60), Polygons(rings[61], ID=61), Polygons(rings[62], ID=62), Polygons(rings[63], ID=63), Polygons(rings[64], ID=64), Polygons(rings[65], ID=65), Polygons(rings[66], ID=66), Polygons(rings[67], ID=67), Polygons(rings[68], ID=68), Polygons(rings[69], ID=69), Polygons(rings[70], ID=70), Polygons(rings[71], ID=71), Polygons(rings[72], ID=72), Polygons(rings[73], ID=73), Polygons(rings[74], ID=74), Polygons(rings[75], ID=75), Polygons(rings[76], ID=76), Polygons(rings[77], ID=77), Polygons(rings[78], ID=78), Polygons(rings[79], ID=79), Polygons(rings[80], ID=80), Polygons(rings[81], ID=81), Polygons(rings[82], ID=82), Polygons(rings[83], ID=83), Polygons(rings[84], ID=84), Polygons(rings[85], ID=85), Polygons(rings[86], ID=86), Polygons(rings[87], ID=87), Polygons(rings[88], ID=88), Polygons(rings[89], ID=89), Polygons(rings[90], ID=90), Polygons(rings[91], ID=91), Polygons(rings[92], ID=92), Polygons(rings[93], ID=93), Polygons(rings[94], ID=94), Polygons(rings[95], ID=95), Polygons(rings[96], ID=96), Polygons(rings[97], ID=97), Polygons(rings[98], ID=98), Polygons(rings[99], ID=99),
+Polygons(rings[100], ID=100), Polygons(rings[101], ID=101), 
+Polygons(rings[102], ID=102), Polygons(rings[103], ID=103), 
+Polygons(rings[104], ID=104), Polygons(rings[105], ID=105), 
+Polygons(rings[106], ID=106), Polygons(rings[107], ID=107), 
+Polygons(rings[108], ID=108), Polygons(rings[109], ID=109),
+Polygons(rings[110], ID=110), Polygons(rings[111], ID=111), 
+Polygons(rings[112], ID=112), Polygons(rings[113], ID=113),
+Polygons(rings[114], ID=114), Polygons(rings[115], ID=115), 
+Polygons(rings[116], ID=116), Polygons(rings[117], ID=117), 
+Polygons(rings[118], ID=118), Polygons(rings[119], ID=119), 
+Polygons(rings[120], ID=120), Polygons(rings[121], ID=121), 
+Polygons(rings[122], ID=122), Polygons(rings[123], ID=123), 
+Polygons(rings[124], ID=124), Polygons(rings[125], ID=125), 
+Polygons(rings[126], ID=126), Polygons(rings[127], ID=127), 
+Polygons(rings[128], ID=128), Polygons(rings[129], ID=129), 
+Polygons(rings[130], ID=130), Polygons(rings[131], ID=131), 
+Polygons(rings[132], ID=132), Polygons(rings[133], ID=133), 
+Polygons(rings[134], ID=134), Polygons(rings[135], ID=135), 
+Polygons(rings[136], ID=136), Polygons(rings[137], ID=137), 
+Polygons(rings[138], ID=138), Polygons(rings[139], ID=139), 
+Polygons(rings[140], ID=140), Polygons(rings[141], ID=141), 
+Polygons(rings[142], ID=142), Polygons(rings[143], ID=143), 
+Polygons(rings[144], ID=144), Polygons(rings[145], ID=145), 
+Polygons(rings[146], ID=146), Polygons(rings[147], ID=147), 
+Polygons(rings[148], ID=148), Polygons(rings[149], ID=149), Polygons(rings[150],ID=150)))
+
+
+
+
+#ecos@plotOrder<-ecor.sg@plotOrder this is differnt because the ids don't match up. i was just required to input an id when i manually made the spatialPolygons
+ecos$ERG<-ecor.sg$ERG
+ecos$Ecoregion<-ecor.sg$Ecoregion
+ecos@proj4string<-ecor.sg@proj4string
+
+
+
+i=1
+outer_ring_001<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_001<-SpatialPolygons(list(Polygons(outer_ring_001,ID=1)))
+plot(eco_001)
+
+i=2
+outer_ring_002<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_002<-SpatialPolygons(list(Polygons(outer_ring_002,ID=1)))
+plot(eco_002)
+
+i=3
+outer_ring_003<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_003<-SpatialPolygons(list(Polygons(outer_ring_003,ID=1)))
+plot(eco_003)
+
+i=4
+outer_ring_004<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_004<-SpatialPolygons(list(Polygons(outer_ring_004,ID=1)))
+plot(eco_004)
+
+i=5
+outer_ring_005<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_005<-SpatialPolygons(list(Polygons(outer_ring_005,ID=1)))
+plot(eco_005)
+
+i=6
+outer_ring_006<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_006<-SpatialPolygons(list(Polygons(outer_ring_006,ID=1)))
+plot(eco_006)
+
+i=7
+outer_ring_007<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_007<-SpatialPolygons(list(Polygons(outer_ring_007,ID=1)))
+plot(eco_007)
+
+i=8  #looks like there are no holes to begin with
+outer_ring_008<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_008<-SpatialPolygons(list(Polygons(outer_ring_008,ID=1)))
+plot(eco_008)
+
+i=9
+outer_ring_009<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_009<-SpatialPolygons(list(Polygons(outer_ring_009,ID=1)))
+plot(eco_009)
+
+i=10
+outer_ring_010<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_010<-SpatialPolygons(list(Polygons(outer_ring_010,ID=1)))
+plot(eco_010)
+
+i=11
+outer_ring_011<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_011<-SpatialPolygons(list(Polygons(outer_ring_011,ID=1)))
+plot(eco_011)
+
+i=12 #looks like there are no holes to begin with
+outer_ring_012<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_012<-SpatialPolygons(list(Polygons(outer_ring_012,ID=1)))
+plot(eco_012)
+
+i=13
+outer_ring_013<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_013<-SpatialPolygons(list(Polygons(outer_ring_013,ID=1)))
+plot(eco_013)
+
+i=14
+outer_ring_014<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_014<-SpatialPolygons(list(Polygons(outer_ring_014,ID=1)))
+plot(eco_014)
+
+i=15
+outer_ring_015<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_015<-SpatialPolygons(list(Polygons(outer_ring_015,ID=1)))
+plot(eco_015)
+
+i=16
+outer_ring_016<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_016<-SpatialPolygons(list(Polygons(outer_ring_016,ID=1)))
+plot(eco_016)
+
+i=17
+outer_ring_017<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_017<-SpatialPolygons(list(Polygons(outer_ring_017,ID=1)))
+plot(eco_017)
+
+i=18
+outer_ring_018<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_018<-SpatialPolygons(list(Polygons(outer_ring_018,ID=1)))
+plot(eco_018)
+
+i=19
+outer_ring_019<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_019<-SpatialPolygons(list(Polygons(outer_ring_019,ID=1)))
+plot(eco_019)
+
+i=20
+outer_ring_020<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_020<-SpatialPolygons(list(Polygons(outer_ring_020,ID=1)))
+plot(eco_020)
+
+i=21
+outer_ring_021<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_021<-SpatialPolygons(list(Polygons(outer_ring_021,ID=1)))
+plot(eco_021)
+
+i=22
+outer_ring_022<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_022<-SpatialPolygons(list(Polygons(outer_ring_022,ID=1)))
+plot(eco_022)
+
+i=23
+outer_ring_023<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_023<-SpatialPolygons(list(Polygons(outer_ring_023,ID=1)))
+plot(eco_023)
+
+i=24 #looks like no holes to begin with
+outer_ring_024<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_024<-SpatialPolygons(list(Polygons(outer_ring_024,ID=1)))
+plot(eco_024)
+
+i=25
+outer_ring_025<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_025<-SpatialPolygons(list(Polygons(outer_ring_025,ID=1)))
+plot(eco_025)
+
+i=26
+outer_ring_026<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_026<-SpatialPolygons(list(Polygons(outer_ring_026,ID=1)))
+plot(eco_026)
+
+i=27
+outer_ring_027<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_027<-SpatialPolygons(list(Polygons(outer_ring_027,ID=1)))
+plot(eco_027)
+
+i=28
+outer_ring_028<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_028<-SpatialPolygons(list(Polygons(outer_ring_028,ID=1)))
+plot(eco_028)
+
+i=29
+outer_ring_029<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_029<-SpatialPolygons(list(Polygons(outer_ring_029,ID=1)))
+plot(eco_029)
+
+i=30
+outer_ring_030<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_030<-SpatialPolygons(list(Polygons(outer_ring_030,ID=1)))
+plot(eco_030)
+
+i=31
+outer_ring_031<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_031<-SpatialPolygons(list(Polygons(outer_ring_031,ID=1)))
+plot(eco_031)
+
+i=32
+outer_ring_032<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_032<-SpatialPolygons(list(Polygons(outer_ring_032,ID=1)))
+plot(eco_032)
+
+
+i=33
+outer_ring_033<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_033<-SpatialPolygons(list(Polygons(outer_ring_033,ID=1)))
+plot(eco_033)
+
+i=34
+outer_ring_034<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_034<-SpatialPolygons(list(Polygons(outer_ring_034,ID=1)))
+plot(eco_034)
+
+i=35
+outer_ring_035<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_035<-SpatialPolygons(list(Polygons(outer_ring_035,ID=1)))
+plot(eco_035)
+
+i=36
+outer_ring_036<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_036<-SpatialPolygons(list(Polygons(outer_ring_036,ID=1)))
+plot(eco_036)
+
+i=37
+outer_ring_037<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_037<-SpatialPolygons(list(Polygons(outer_ring_037,ID=1)))
+plot(eco_037)
+
+i=38
+outer_ring_038<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_038<-SpatialPolygons(list(Polygons(outer_ring_038,ID=1)))
+plot(eco_038)
+
+i=39
+outer_ring_039<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_039<-SpatialPolygons(list(Polygons(outer_ring_039,ID=1)))
+plot(eco_039)
+
+i=40
+outer_ring_040<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_040<-SpatialPolygons(list(Polygons(outer_ring_040,ID=1)))
+plot(eco_040)
+
+i=41
+outer_ring_041<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_041<-SpatialPolygons(list(Polygons(outer_ring_041,ID=1)))
+plot(eco_041)
+
+i=42
+outer_ring_042<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_042<-SpatialPolygons(list(Polygons(outer_ring_042,ID=1)))
+plot(eco_042)
+
+i=43
+outer_ring_043<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_043<-SpatialPolygons(list(Polygons(outer_ring_043,ID=1)))
+plot(eco_043)
+
+i=44
+outer_ring_044<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_044<-SpatialPolygons(list(Polygons(outer_ring_044,ID=1)))
+plot(eco_044)
+
+i=45
+outer_ring_045<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_045<-SpatialPolygons(list(Polygons(outer_ring_045,ID=1)))
+plot(eco_045)
+
+i=46
+outer_ring_046<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_046<-SpatialPolygons(list(Polygons(outer_ring_046,ID=1)))
+plot(eco_046)
+
+i=47
+outer_ring_047<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_047<-SpatialPolygons(list(Polygons(outer_ring_047,ID=1)))
+plot(eco_047)
+
+i=48
+outer_ring_048<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_048<-SpatialPolygons(list(Polygons(outer_ring_048,ID=1)))
+plot(eco_048)
+
+i=49
+outer_ring_049<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_049<-SpatialPolygons(list(Polygons(outer_ring_049,ID=1)))
+plot(eco_049)
+
+
+i=50
+outer_ring_050<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_050<-SpatialPolygons(list(Polygons(outer_ring_050,ID=1)))
+plot(eco_050)
+
+i=51
+outer_ring_051<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_051<-SpatialPolygons(list(Polygons(outer_ring_051,ID=1)))
+plot(eco_051)
+
+i=52
+outer_ring_052<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_052<-SpatialPolygons(list(Polygons(outer_ring_052,ID=1)))
+plot(eco_052)
+
+i=53
+outer_ring_053<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_053<-SpatialPolygons(list(Polygons(outer_ring_053,ID=1)))
+plot(eco_053)
+
+i=54
+outer_ring_054<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_054<-SpatialPolygons(list(Polygons(outer_ring_054,ID=1)))
+plot(eco_054)
+
+i=55
+outer_ring_055<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_055<-SpatialPolygons(list(Polygons(outer_ring_055,ID=1)))
+plot(eco_055)
+
+i=56
+outer_ring_056<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_056<-SpatialPolygons(list(Polygons(outer_ring_056,ID=1)))
+plot(eco_056)
+
+i=57
+outer_ring_057<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_057<-SpatialPolygons(list(Polygons(outer_ring_057,ID=1)))
+plot(eco_057)
+
+i=58  #not perfect
+outer_ring_058<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+#outer_ring_058<-ECO@polygons[[i]]@Polygons[1]
+eco_058<-SpatialPolygons(list(Polygons(outer_ring_058,ID=1)))
+plot(eco_058)
+
+i=59
+outer_ring_059<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_059<-SpatialPolygons(list(Polygons(outer_ring_059,ID=1)))
+plot(eco_059)
+
+i=60
+outer_ring_060<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_060<-SpatialPolygons(list(Polygons(outer_ring_060,ID=1)))
+plot(eco_060)
+
+i=61
+outer_ring_061<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_061<-SpatialPolygons(list(Polygons(outer_ring_061,ID=1)))
+plot(eco_061)
+
+i=62
+outer_ring_062<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_062<-SpatialPolygons(list(Polygons(outer_ring_062,ID=1)))
+plot(eco_062)
+
+i=63
+outer_ring_063<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_063<-SpatialPolygons(list(Polygons(outer_ring_063,ID=1)))
+plot(eco_063)
+
+i=64
+outer_ring_064<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_064<-SpatialPolygons(list(Polygons(outer_ring_064,ID=1)))
+plot(eco_064)
+
+i=65
+outer_ring_065<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_065<-SpatialPolygons(list(Polygons(outer_ring_065,ID=1)))
+plot(eco_065)
+
+i=66
+outer_ring_066<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_066<-SpatialPolygons(list(Polygons(outer_ring_066,ID=1)))
+plot(eco_066)
+
+i=67
+outer_ring_067<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_067<-SpatialPolygons(list(Polygons(outer_ring_067,ID=1)))
+plot(eco_067)
+
+i=68
+outer_ring_068<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_068<-SpatialPolygons(list(Polygons(outer_ring_068,ID=1)))
+plot(eco_068)
+
+i=69
+outer_ring_069<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_069<-SpatialPolygons(list(Polygons(outer_ring_069,ID=1)))
+plot(eco_069)
+
+i=70
+outer_ring_070<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_070<-SpatialPolygons(list(Polygons(outer_ring_070,ID=1)))
+plot(eco_070)
+
+i=71
+outer_ring_071<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_071<-SpatialPolygons(list(Polygons(outer_ring_071,ID=1)))
+plot(eco_071)
+
+i=72
+outer_ring_072<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_072<-SpatialPolygons(list(Polygons(outer_ring_072,ID=1)))
+plot(eco_072)
+
+i=73
+outer_ring_073<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_073<-SpatialPolygons(list(Polygons(outer_ring_073,ID=1)))
+plot(eco_073)
+
+i=74
+outer_ring_074<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_074<-SpatialPolygons(list(Polygons(outer_ring_074,ID=1)))
+plot(eco_074)
+
+i=75
+outer_ring_075<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_075<-SpatialPolygons(list(Polygons(outer_ring_075,ID=1)))
+plot(eco_075)
+
+i=76
+outer_ring_076<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_076<-SpatialPolygons(list(Polygons(outer_ring_076,ID=1)))
+plot(eco_076)
+
+i=77
+outer_ring_077<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_077<-SpatialPolygons(list(Polygons(outer_ring_077,ID=1)))
+plot(eco_077)
+
+i=78
+outer_ring_078<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_078<-SpatialPolygons(list(Polygons(outer_ring_078,ID=1)))
+plot(eco_078)
+
+i=79
+outer_ring_079<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_079<-SpatialPolygons(list(Polygons(outer_ring_079,ID=1)))
+plot(eco_079)
+
+i=80
+outer_ring_080<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_080<-SpatialPolygons(list(Polygons(outer_ring_080,ID=1)))
+plot(eco_080)
+
+
+i=81 #not perfect
+outer_ring_081<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_081<-SpatialPolygons(list(Polygons(outer_ring_081,ID=1)))
+plot(eco_081)
+
+i=82
+outer_ring_082<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_082<-SpatialPolygons(list(Polygons(outer_ring_082,ID=1)))
+plot(eco_082)
+
+i=83
+outer_ring_083<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_083<-SpatialPolygons(list(Polygons(outer_ring_083,ID=1)))
+plot(eco_083)
+
+i=84
+outer_ring_084<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_084<-SpatialPolygons(list(Polygons(outer_ring_084,ID=1)))
+plot(eco_084)
+
+i=85
+outer_ring_085<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_085<-SpatialPolygons(list(Polygons(outer_ring_085,ID=1)))
+plot(eco_085)
+
+i=86
+outer_ring_086<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_086<-SpatialPolygons(list(Polygons(outer_ring_086,ID=1)))
+plot(eco_086)
+
+i=87
+outer_ring_087<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_087<-SpatialPolygons(list(Polygons(outer_ring_087,ID=1)))
+plot(eco_087)
+
+i=88
+outer_ring_088<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_088<-SpatialPolygons(list(Polygons(outer_ring_088,ID=1)))
+plot(eco_088)
+
+i=89
+outer_ring_089<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_089<-SpatialPolygons(list(Polygons(outer_ring_089,ID=1)))
+plot(eco_089)
+
+i=90
+outer_ring_090<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_090<-SpatialPolygons(list(Polygons(outer_ring_090,ID=1)))
+plot(eco_090)
+
+i=91
+outer_ring_091<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_091<-SpatialPolygons(list(Polygons(outer_ring_091,ID=1)))
+plot(eco_091)
+
+i=92
+outer_ring_092<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_092<-SpatialPolygons(list(Polygons(outer_ring_092,ID=1)))
+plot(eco_092)
+
+i=93
+outer_ring_093<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_093<-SpatialPolygons(list(Polygons(outer_ring_093,ID=1)))
+plot(eco_093)
+
+i=94
+outer_ring_094<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_094<-SpatialPolygons(list(Polygons(outer_ring_094,ID=1)))
+plot(eco_094)
+
+i=95
+outer_ring_095<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_095<-SpatialPolygons(list(Polygons(outer_ring_095,ID=1)))
+plot(eco_095)
+
+i=96
+outer_ring_096<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_096<-SpatialPolygons(list(Polygons(outer_ring_096,ID=1)))
+plot(eco_096)
+
+i=97
+outer_ring_097<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_097<-SpatialPolygons(list(Polygons(outer_ring_097,ID=1)))
+plot(eco_097)
+
+i=98
+outer_ring_098<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_098<-SpatialPolygons(list(Polygons(outer_ring_098,ID=1)))
+plot(eco_098)
+
+i=99
+outer_ring_099<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_099<-SpatialPolygons(list(Polygons(outer_ring_099,ID=1)))
+plot(eco_099)
+
+
+i=100
+outer_ring_100<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_100<-SpatialPolygons(list(Polygons(outer_ring_100,ID=1)))
+plot(eco_100)
+
+i=101
+outer_ring_101<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_101<-SpatialPolygons(list(Polygons(outer_ring_101,ID=1)))
+plot(eco_101)
+
+i=102
+outer_ring_102<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_102<-SpatialPolygons(list(Polygons(outer_ring_102,ID=1)))
+plot(eco_102)
+
+i=103
+outer_ring_103<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_103<-SpatialPolygons(list(Polygons(outer_ring_103,ID=1)))
+plot(eco_103)
+
+i=104
+outer_ring_104<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_104<-SpatialPolygons(list(Polygons(outer_ring_104,ID=1)))
+plot(eco_104)
+
+i=105 
+outer_ring_105<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_105<-SpatialPolygons(list(Polygons(outer_ring_105,ID=1)))
+plot(eco_105)
+
+i=106 #not perfect
+outer_ring_106<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_106<-SpatialPolygons(list(Polygons(outer_ring_106,ID=1)))
+plot(eco_106)
+
+i=107
+outer_ring_107<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_107<-SpatialPolygons(list(Polygons(outer_ring_107,ID=1)))
+plot(eco_107)
+
+i=108
+outer_ring_108<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_108<-SpatialPolygons(list(Polygons(outer_ring_108,ID=1)))
+plot(eco_108)
+
+i=109
+outer_ring_109<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_109<-SpatialPolygons(list(Polygons(outer_ring_109,ID=1)))
+plot(eco_109)
+
+i=110
+outer_ring_110<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_110<-SpatialPolygons(list(Polygons(outer_ring_110,ID=1)))
+plot(eco_110)
+
+
+i=111
+outer_ring_111<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_111<-SpatialPolygons(list(Polygons(outer_ring_111,ID=1)))
+plot(eco_111)
+
+
+i=112
+outer_ring_112<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_112<-SpatialPolygons(list(Polygons(outer_ring_112,ID=1)))
+plot(eco_112)
+
+i=113
+outer_ring_113<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_113<-SpatialPolygons(list(Polygons(outer_ring_113,ID=1)))
+plot(eco_113)
+
+i=114
+outer_ring_114<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_114<-SpatialPolygons(list(Polygons(outer_ring_114,ID=1)))
+plot(eco_114)
+
+i=115
+outer_ring_115<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_115<-SpatialPolygons(list(Polygons(outer_ring_115,ID=1)))
+plot(eco_115)
+
+i=116
+outer_ring_116<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_116<-SpatialPolygons(list(Polygons(outer_ring_116,ID=1)))
+plot(eco_116)
+
+
+i=117
+outer_ring_117<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_117<-SpatialPolygons(list(Polygons(outer_ring_117,ID=1)))
+plot(eco_117)
+
+i=118
+outer_ring_118<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_118<-SpatialPolygons(list(Polygons(outer_ring_118,ID=1)))
+plot(eco_118)
+
+i=119
+outer_ring_119<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_119<-SpatialPolygons(list(Polygons(outer_ring_119,ID=1)))
+plot(eco_119)
+
+i=120
+outer_ring_120<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_120<-SpatialPolygons(list(Polygons(outer_ring_120,ID=1)))
+plot(eco_120)
+
+
+i=121
+outer_ring_121<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_121<-SpatialPolygons(list(Polygons(outer_ring_121,ID=1)))
+plot(eco_121)
+
+i=122
+outer_ring_122<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_122<-SpatialPolygons(list(Polygons(outer_ring_122,ID=1)))
+plot(eco_122)
+
+i=123
+outer_ring_123<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_123<-SpatialPolygons(list(Polygons(outer_ring_123,ID=1)))
+plot(eco_123)
+
+i=124
+outer_ring_124<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_124<-SpatialPolygons(list(Polygons(outer_ring_124,ID=1)))
+plot(eco_124)
+
+i=125
+outer_ring_125<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_125<-SpatialPolygons(list(Polygons(outer_ring_125,ID=1)))
+plot(eco_125)
+
+i=126
+outer_ring_126<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_126<-SpatialPolygons(list(Polygons(outer_ring_126,ID=1)))
+plot(eco_126)
+
+i=127
+outer_ring_127<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_127<-SpatialPolygons(list(Polygons(outer_ring_127,ID=1)))
+plot(eco_127)
+
+i=128
+outer_ring_128<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_128<-SpatialPolygons(list(Polygons(outer_ring_128,ID=1)))
+plot(eco_128)
+
+i=129
+outer_ring_129<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_129<-SpatialPolygons(list(Polygons(outer_ring_129,ID=1)))
+plot(eco_129)
+
+i=130
+outer_ring_130<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_130<-SpatialPolygons(list(Polygons(outer_ring_130,ID=1)))
+plot(eco_130)
+
+i=131
+outer_ring_131<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_131<-SpatialPolygons(list(Polygons(outer_ring_131,ID=1)))
+plot(eco_131)
+
+i=132
+outer_ring_132<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_132<-SpatialPolygons(list(Polygons(outer_ring_132,ID=1)))
+plot(eco_132)
+
+i=133
+outer_ring_133<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_133<-SpatialPolygons(list(Polygons(outer_ring_133,ID=1)))
+plot(eco_133)
+
+i=134
+outer_ring_134<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_134<-SpatialPolygons(list(Polygons(outer_ring_134,ID=1)))
+plot(eco_134)
+
+i=135
+outer_ring_135<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_135<-SpatialPolygons(list(Polygons(outer_ring_135,ID=1)))
+plot(eco_135)
+
+i=136
+outer_ring_136<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_136<-SpatialPolygons(list(Polygons(outer_ring_136,ID=1)))
+plot(eco_136)
+
+i=137
+outer_ring_137<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_137<-SpatialPolygons(list(Polygons(outer_ring_137,ID=1)))
+plot(eco_137)
+
+i=138
+outer_ring_138<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_138<-SpatialPolygons(list(Polygons(outer_ring_138,ID=1)))
+plot(eco_138)
+
+i=139
+outer_ring_139<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_139<-SpatialPolygons(list(Polygons(outer_ring_139,ID=1)))
+plot(eco_139)
+
+i=140
+outer_ring_140<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_140<-SpatialPolygons(list(Polygons(outer_ring_140,ID=1)))
+plot(eco_140)
+
+i=141
+outer_ring_141<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_141<-SpatialPolygons(list(Polygons(outer_ring_141,ID=1)))
+plot(eco_141)
+
+i=142
+outer_ring_142<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_142<-SpatialPolygons(list(Polygons(outer_ring_142,ID=1)))
+plot(eco_142)
+
+i=143
+outer_ring_143<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_143<-SpatialPolygons(list(Polygons(outer_ring_143,ID=1)))
+plot(eco_143)
+
+i=144
+outer_ring_144<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_144<-SpatialPolygons(list(Polygons(outer_ring_144,ID=1)))
+plot(eco_144)
+
+i=145
+outer_ring_145<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_145<-SpatialPolygons(list(Polygons(outer_ring_145,ID=1)))
+plot(eco_145)
+
+i=146
+outer_ring_146<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_146<-SpatialPolygons(list(Polygons(outer_ring_146,ID=1)))
+plot(eco_146)
+
+i=147
+outer_ring_147<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_147<-SpatialPolygons(list(Polygons(outer_ring_147,ID=1)))
+plot(eco_147)
+
+i=148
+outer_ring_148<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_148<-SpatialPolygons(list(Polygons(outer_ring_148,ID=1)))
+plot(eco_148)
+
+i=149
+outer_ring_149<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_149<-SpatialPolygons(list(Polygons(outer_ring_149,ID=1)))
+plot(eco_149)
+
+i=150
+outer_ring_150<-Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)
+eco_150<-SpatialPolygons(list(Polygons(outer_ring_150,ID=1)))
+plot(eco_150)
+
+
+ecos<-SpatialPolygons(list(Polygons(outer_ring_001,ID=1), Polygons(outer_ring_002, ID=2), Polygons(outer_ring_003, ID=3), Polygons(outer_ring_004, ID=4), Polygons(outer_ring_005, ID=5), Polygons(outer_ring_006, ID=6), Polygons(outer_ring_007, ID=7), Polygons(outer_ring_008, ID=8), Polygons(outer_ring_009, ID=9), Polygons(outer_ring_010,ID=10), Polygons(outer_ring_011,ID=11), Polygons(outer_ring_012, ID=12), Polygons(outer_ring_013, ID=13), Polygons(outer_ring_014, ID=14), Polygons(outer_ring_015, ID=15), Polygons(outer_ring_016, ID=16), Polygons(outer_ring_017, ID=17), Polygons(outer_ring_018, ID=18), Polygons(outer_ring_019, ID=19), Polygons(outer_ring_020, ID=20), Polygons(outer_ring_021, ID=21), Polygons(outer_ring_022, ID=22), Polygons(outer_ring_023, ID=23), Polygons(outer_ring_024, ID=24), Polygons(outer_ring_025, ID=25), Polygons(outer_ring_026, ID=26), Polygons(outer_ring_027, ID=27), Polygons(outer_ring_028, ID=28), Polygons(outer_ring_029, ID=29), Polygons(outer_ring_030, ID=30), Polygons(outer_ring_031, ID=31), Polygons(outer_ring_032, ID=32), Polygons(outer_ring_033, ID=33), Polygons(outer_ring_034, ID=34), Polygons(outer_ring_035, ID=35), Polygons(outer_ring_036, ID=36), Polygons(outer_ring_037, ID=37), Polygons(outer_ring_038, ID=38), Polygons(outer_ring_039, ID=39), Polygons(outer_ring_040, ID=40), Polygons(outer_ring_041, ID=41), Polygons(outer_ring_042, ID=42), Polygons(outer_ring_043, ID=43), Polygons(outer_ring_044, ID=44), Polygons(outer_ring_045, ID=45), Polygons(outer_ring_046, ID=46), Polygons(outer_ring_047, ID=47), Polygons(outer_ring_048, ID=48), Polygons(outer_ring_049, ID=49), Polygons(outer_ring_050, ID=50), Polygons(outer_ring_051, ID=51), Polygons(outer_ring_052, ID=52), Polygons(outer_ring_053, ID=53), Polygons(outer_ring_054, ID=54), Polygons(outer_ring_055, ID=55), Polygons(outer_ring_056, ID=56), Polygons(outer_ring_057, ID=57), Polygons(outer_ring_058, ID=58), Polygons(outer_ring_059, ID=59), Polygons(outer_ring_060, ID=60), Polygons(outer_ring_061, ID=61), Polygons(outer_ring_062, ID=62), Polygons(outer_ring_063, ID=63), Polygons(outer_ring_064, ID=64), Polygons(outer_ring_065, ID=65), Polygons(outer_ring_066, ID=66), Polygons(outer_ring_067, ID=67), Polygons(outer_ring_068, ID=68), Polygons(outer_ring_069, ID=69), Polygons(outer_ring_070, ID=70), Polygons(outer_ring_071, ID=71), Polygons(outer_ring_072, ID=72), Polygons(outer_ring_073, ID=73), Polygons(outer_ring_074, ID=74), Polygons(outer_ring_075, ID=75), Polygons(outer_ring_076, ID=76), Polygons(outer_ring_077, ID=77), Polygons(outer_ring_078, ID=78), Polygons(outer_ring_079, ID=79), Polygons(outer_ring_080, ID=80), Polygons(outer_ring_081, ID=81), Polygons(outer_ring_082, ID=82), Polygons(outer_ring_083, ID=83), Polygons(outer_ring_084, ID=84), Polygons(outer_ring_085, ID=85), Polygons(outer_ring_086, ID=86), Polygons(outer_ring_087, ID=87), Polygons(outer_ring_088, ID=88), Polygons(outer_ring_089, ID=89), Polygons(outer_ring_090, ID=90), Polygons(outer_ring_091, ID=91), Polygons(outer_ring_092, ID=92), Polygons(outer_ring_093, ID=93), Polygons(outer_ring_094, ID=94), Polygons(outer_ring_095, ID=95), Polygons(outer_ring_096, ID=96), Polygons(outer_ring_097, ID=97), Polygons(outer_ring_098, ID=98), Polygons(outer_ring_099, ID=99),
+Polygons(outer_ring_100, ID=100), Polygons(outer_ring_101, ID=101), 
+Polygons(outer_ring_102, ID=102), Polygons(outer_ring_103, ID=103), 
+Polygons(outer_ring_104, ID=104), Polygons(outer_ring_105, ID=105), 
+Polygons(outer_ring_106, ID=106), Polygons(outer_ring_107, ID=107), 
+Polygons(outer_ring_108, ID=108), Polygons(outer_ring_109, ID=109),
+Polygons(outer_ring_110, ID=110), Polygons(outer_ring_111, ID=111), 
+Polygons(outer_ring_112, ID=112), Polygons(outer_ring_113, ID=113),
+Polygons(outer_ring_114, ID=114), Polygons(outer_ring_115, ID=115), 
+Polygons(outer_ring_116, ID=116), Polygons(outer_ring_117, ID=117), 
+Polygons(outer_ring_118, ID=118), Polygons(outer_ring_119, ID=119), 
+Polygons(outer_ring_120, ID=120), Polygons(outer_ring_121, ID=121), 
+Polygons(outer_ring_122, ID=122), Polygons(outer_ring_123, ID=123), 
+Polygons(outer_ring_124, ID=124), Polygons(outer_ring_125, ID=125), 
+Polygons(outer_ring_126, ID=126), Polygons(outer_ring_127, ID=127), 
+Polygons(outer_ring_128, ID=128), Polygons(outer_ring_129, ID=129), 
+Polygons(outer_ring_130, ID=130), Polygons(outer_ring_131, ID=131), 
+Polygons(outer_ring_132, ID=132), Polygons(outer_ring_133, ID=133), 
+Polygons(outer_ring_134, ID=134), Polygons(outer_ring_135, ID=135), 
+Polygons(outer_ring_136, ID=136), Polygons(outer_ring_137, ID=137), 
+Polygons(outer_ring_138, ID=138), Polygons(outer_ring_139, ID=139), 
+Polygons(outer_ring_140, ID=140), Polygons(outer_ring_141, ID=141), 
+Polygons(outer_ring_142, ID=142), Polygons(outer_ring_143, ID=143), 
+Polygons(outer_ring_144, ID=144), Polygons(outer_ring_145, ID=145), 
+Polygons(outer_ring_146, ID=146), Polygons(outer_ring_147, ID=147), 
+Polygons(outer_ring_148, ID=148), Polygons(outer_ring_149, ID=149), Polygons(outer_ring_150, ID=150)))
+
+ecos$ERG<-ecor.sg$ERG
+ecos$Ecoregion<-ecor.sg$Ecoregion
+ecos@proj4string<-ecor.sg@proj4string
+ecos@plotOrder<-ecor.sg@plotOrder
+ecos@data<-ecor.sg@data
+
+plot(ecos)
+
+plot(SpatialPolygons(ECO@polygons[[1]]@Polygons))
+outer_ring<-Filter(function(f){f@ringDir==1}, ecor.sg@polygons[[i]]@Polygons)
+eco_specific<-SpatialPolygons(list(Polygons(rings[1],ID=1)))
+
+```
