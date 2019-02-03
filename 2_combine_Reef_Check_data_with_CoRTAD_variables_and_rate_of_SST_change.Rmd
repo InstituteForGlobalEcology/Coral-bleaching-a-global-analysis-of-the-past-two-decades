@@ -1,0 +1,73 @@
+---
+title: "combine_reef_check_with_cortad_variables_with_annual_rate_of_SST_change"
+author: "SS"
+date: "February 02, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r load libraries and read in csvs and shapefiles}
+library(rgdal)
+
+main_working_directory="C:/Users/Shannon/Desktop/Ecoregions"
+ecoregion_polygons_directory="C:/Users/Shannon/Desktop/Ecoregions/shapefiles"
+
+setwd(main_working_directory)
+#read in the Reef Check csv
+RC_with_cortad_variables <- read.csv(file="Reef_Check_with_cortad_variables.csv", header=TRUE, sep=",")
+
+annual_rate_of_SST_change<- read.csv(file="SST_rate_of_change_NOAA_1_km_res.csv", header=TRUE, sep=",")
+names(annual_rate_of_SST_change)[2]<-"annual_rate_of_SST_change"
+diversity_data<-read.csv(file="Coral_diversity_numbers.csv")
+
+ECO<-readOGR(ecoregion_polygons_directory,"ecoregion_exportPolygon")
+```
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  #include a brief pause because if running in Rstudio, it takes a while for the code to run and for the value to be loaded into the global environment. If there is no pause, the next iteration of the loop starts before the previous value is fully saved and loaded into the environment, and there can be errors in the shapefile 
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+```{r do the overlay to determine which ecoregion each study falls into and get its diversity value}
+
+coordinates(RC_with_cortad_variables)<- ~Longitude.Degrees+Latitude.Degrees
+proj4string(RC_with_cortad_variables)<-"+proj=longlat +ellps=WGS84 +datum=WGS84"
+bldata<-spTransform(RC_with_cortad_variables,proj4string(ECO))
+
+#get the ecoregion number for each study. NA means the study falls outside all ecoregion areas
+test<-over(bldata,ECO)
+RC_with_cortad_variables$Region<-as.character(test$ERG)
+
+#grab the corresponding diversity value for each ecoregion
+RC_with_cortad_variables$Diversity<-NA
+for (i in 1:length(RC_with_cortad_variables$Region))
+{
+  if (!is.na(RC_with_cortad_variables$Region[i]))
+  {
+    RC_with_cortad_variables$Diversity[i]<-diversity_data$SpeciesAccepted[(diversity_data$Ecoregion==RC_with_cortad_variables$Region[i])]
+  }
+}
+```
+
+```{r combine csvs and write new csv Reef_Check_with_cortad_variables_with_annual_rate_of_SST_change.csv}
+RC_with_cortad_variables_with_annual_rate_of_SST_change<-cbind(RC_with_cortad_variables, "rate_of_SST_change"=annual_rate_of_SST_change[,2])
+names(RC_with_cortad_variables_with_annual_rate_of_SST_change)[54]<-"rate_of_SST_change"
+
+write.csv(RC_with_cortad_variables_with_annual_rate_of_SST_change, "Reef_Check_with_cortad_variables_with_annual_rate_of_SST_change.csv")
+```
