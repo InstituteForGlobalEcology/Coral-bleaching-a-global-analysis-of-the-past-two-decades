@@ -1,0 +1,214 @@
+---
+title: "calculate mean for each variable per ecoregion"
+author: "SS"
+date: "February 02, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r load_libraries}
+library(MASS)
+library(audio)
+library(sp)
+library(foreign)
+library(rgdal)
+library(maptools)
+library(rgeos)
+library(doParallel)
+library(rasterVis)
+library(dismo)
+library(plotKML)
+library(SDMTools)
+library(PBSmapping)
+library(lme4)
+library(blme)
+library(raster)
+library(fields)
+library(RColorBrewer)
+library(sjmisc)
+library(ncdf4)
+library(knitr)
+library(runjags)
+library(lattice)
+library(mgcv)
+library(coefplot)
+library(R2jags)
+library(ggplot2)
+library(stringr)
+library(parallel)
+library(plotrix)
+```
+
+#set the main working directory
+main_working_directory="C:/Users/Shannon/Desktop/Ecoregions"
+
+#set a graphs directory for the output graphs
+graphs_directory="C:/Users/Shannon/Desktop/Ecoregions/output"
+
+#set the ecoregion shapefile directory
+ecoregion_polygons_directory="C:/Users/Shannon/Desktop/Ecoregions/ecoregion_exportPolygon"
+ECO<-readOGR(ecoregion_polygons_directory,"ecoregion_exportPolygon")
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  #include a brief pause (Sys.sleep function) because if running in Rstudio, it takes a while for the code to run and for the value to be loaded into the global environment. If there is no pause, the next iteration of the loop starts before the previous value is fully saved and loaded into the environment, and there can be errors in the shapefile 
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+setwd(main_working_directory)
+source(file= "HighstatLibV10.R")  
+source(file= "MCMCSupportHighstatV4.R")
+source(file= "MyBUGSOutput.R")
+
+#read in the Bleaching Data
+StudyTitle<-"Reef_Check"
+csv_Title<-paste(StudyTitle, "_with_cortad_variables_with_annual_rate_of_SST_change.csv", sep="")
+Bleaching_Data_with_cortad_variables<-read.csv(csv_Title, header=TRUE, sep=",")
+
+#rename the "ï..Reef.ID" variable to "Site", if it appears in the file. Sometimes this can happen because of encoding in the csv.
+names(Bleaching_Data_with_cortad_variables)[names(Bleaching_Data_with_cortad_variables)=='ï..Reef.ID']<-'Site'
+names(Bleaching_Data_with_cortad_variables)[names(Bleaching_Data_with_cortad_variables)=='Reef.ID']<-'Site'
+
+```{r subset to exclude NA's}
+for(i in 1:ncol(Bleaching_Data_with_cortad_variables)) Bleaching_Data_with_cortad_variables <- subset(Bleaching_Data_with_cortad_variables, !is.na(Bleaching_Data_with_cortad_variables[,i]))
+```
+
+```{r plotmap_function}
+plot.map<- function(database,center,transf=T,...){
+  Obj <- map(database,...,plot=F)
+  coord <- cbind(Obj[[1]],Obj[[2]])
+  newproj <- "+proj=merc +lon_0=150 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs" #utm
+  nextproj<-"+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0" #latlong
+  # split up the coordinates
+  id <- rle(!is.na(coord[,1]))
+  id <- matrix(c(1,cumsum(id$lengths)),ncol=2,byrow=T)
+  polygons <- apply(id,1,function(i){coord[i[1]:i[2],]})
+  
+  # split up polygons that differ too much
+  polygons <- lapply(polygons,function(x){
+    x[,1] <- x[,1] + center
+    x[,1] <- ifelse(x[,1]>180,x[,1]-360,x[,1])
+    if(sum(diff(x[,1])>300,na.rm=T) >0){
+      id <- x[,1] < 0
+      x <- rbind(x[id,],c(NA,NA),x[!id,])
+    }
+    x
+  })
+  # reconstruct the object
+  polygons <- do.call(rbind,polygons)
+  
+  
+  colnames(polygons)<-c("x",'y')
+  polygons<-as.data.frame(polygons)
+  z<-complete.cases(polygons)
+  p<-z
+  z<-cbind(z,z)
+  polygons<-polygons[complete.cases(polygons),]
+  coordinates(polygons)<-~x+y
+  proj4string(polygons)<-CRS(nextproj)
+  if(transf==T){ polygons<-spTransform(polygons,CRS(newproj))}
+  
+  z[p==F,]<-c(NA,NA)
+  z[which(p==T),]<-coordinates(polygons)
+  Obj[[1]] <- z[,1]
+  Obj[[2]] <- z[,2]
+  
+  map(Obj,...)
+}
+```
+
+```{r fit data into ecoregions}
+library(raster)
+
+#plot the ecoregions. use color values between 67 and 137 because there are no white colors in there to be confused with ecoregions that are white because they are empty
+setwd(graphs_directory)
+tiff("Ecoregions.tif",res=300,width=4500,height=1500)
+color_values= runif(length(levels(ECO$Ecoregion)), 67,137)
+plot(ECO, col=color_values)
+plot.map("world", center=0 ,bg="#00000000",ylim=c(-90,90),fill=T,add=T,xlab='longitude',ylab='latitude', col="darkseagreen") #center is still 0
+box()
+dev.off()
+
+#get Reef Check and ecoregion data in the same coordinate reference system
+coordinates(Bleaching_Data_with_cortad_variables)<- ~Longitude.Degrees+Latitude.Degrees
+proj4string(Bleaching_Data_with_cortad_variables)<-"+proj=longlat +ellps=WGS84 +datum=WGS84"
+bldata<-spTransform(Bleaching_Data_with_cortad_variables,proj4string(ECO))
+
+#get the ecoregion number for each study. NA means the study falls outside all ecoregion areas
+test<-over(bldata,ECO)
+Bleaching_Data_with_cortad_variables$Region<-test$ERG
+
+```
+
+#length(levels(Bleaching_Data_with_cortad_variables$Site)) =3694
+
+```{r obtain vectors for each variable describing the ecoregions and write csv}
+
+ecos<-as.vector(levels(Bleaching_Data_with_cortad_variables$Region))
+lats<- as.vector(matrix(NA, nrow=150))
+lons<- as.vector(matrix(NA, nrow=150))
+sst_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+tsa_freq_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+ssta_dhw_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+rate_of_sst_change_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+sst_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+ssta_freq_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+ssta_freqmean_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+average_bleaching_mean_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+stdev_bleaching_per_ecoregion<-as.vector(matrix(NA, nrow=150))
+tsa_freq_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+tsa_dhwmean_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+tsa_dhw_stdev_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+diversity_per_ecoregion<- as.vector(matrix(NA, nrow=150))
+
+for (eco in 1:150){
+  ecoregion_data<-subset(Bleaching_Data_with_cortad_variables,  as.character(Bleaching_Data_with_cortad_variables$Region)==levels(Bleaching_Data_with_cortad_variables$Region)[eco])
+  lats[eco]<-mean(ecoregion_data$Latitude.Degrees)
+  lons[eco]<-mean(ecoregion_data$Longitude.Degrees)
+  sst_per_ecoregion[eco]<-mean(ecoregion_data$Temperature_Kelvin)
+  tsa_freq_per_ecoregion[eco]<-mean(ecoregion_data$TSA_Frequency)
+  ssta_dhw_per_ecoregion[eco]<-mean(ecoregion_data$SSTA_DHW)
+  rate_of_sst_change_per_ecoregion[eco]<-mean(ecoregion_data$rate_of_SST_change)
+  sst_stdev_per_ecoregion[eco]<-mean(ecoregion_data$Temperature_Kelvin_Standard_Deviation)
+  ssta_freq_stdev_per_ecoregion[eco]<-mean(ecoregion_data$SSTA_Frequency_Standard_Deviation)
+  ssta_freqmean_per_ecoregion[eco]<-mean(ecoregion_data$SSTA_FrequencyMean)
+  tsa_freq_stdev_per_ecoregion[eco]<-mean(ecoregion_data$TSA_Frequency_Standard_Deviation)
+  tsa_dhwmean_per_ecoregion[eco]<-mean(ecoregion_data$TSA_DHWMean)
+  tsa_dhw_stdev_per_ecoregion[eco]<-mean(ecoregion_data$TSA_DHW_Standard_Deviation)
+  average_bleaching_mean_per_ecoregion[eco]<- mean(ecoregion_data$Average_bleaching)
+  stdev_bleaching_per_ecoregion[eco]<-sd(ecoregion_data$Average_bleaching)
+  diversity_per_ecoregion[eco]<-mean(ecoregion_data$Diversity)
+}
+
+ERG<-ecos
+n<-as.vector(rep(100, times=150))
+samples<-as.vector(rep(NA, times=150))
+
+regions_vector<-as.vector(Bleaching_Data_with_cortad_variables$Region)
+regions_vector<-subset(regions_vector, !is.na(regions_vector))
+for (i in 1:150){
+samples[i]<-sum(regions_vector==levels(Bleaching_Data_with_cortad_variables$Region)[i])
+}
+
+variables_per_ecoregion<-cbind(ERG=ERG, n=n, samples=samples, sst_per_ecoregion=sst_per_ecoregion, tsa_freq_per_ecoregion=tsa_freq_per_ecoregion, ssta_dhw_per_ecoregion=ssta_dhw_per_ecoregion, rate_of_sst_change_per_ecoregion=rate_of_sst_change_per_ecoregion, sst_stdev_per_ecoregion=sst_stdev_per_ecoregion, ssta_freq_stdev_per_ecoregion=ssta_freq_stdev_per_ecoregion, ssta_freqmean_per_ecoregion=ssta_freqmean_per_ecoregion, tsa_freq_stdev_per_ecoregion=tsa_freq_stdev_per_ecoregion, tsa_dhwmean_per_ecoregion=tsa_dhwmean_per_ecoregion, tsa_dhw_stdev_per_ecoregion=tsa_dhw_stdev_per_ecoregion, average_bleaching_mean_per_ecoregion=average_bleaching_mean_per_ecoregion, stdev_bleaching_per_ecoregion=stdev_bleaching_per_ecoregion, diversity_per_ecoregion=diversity_per_ecoregion)
+
+variables_per_ecoregion<-subset(variables_per_ecoregion, samples>0)
+
+
+setwd("C:/Users/Shannon/Desktop/Ecoregions")
+write.csv(variables_per_ecoregion, file = "EcoRegions_mean_variables.csv")
+```
