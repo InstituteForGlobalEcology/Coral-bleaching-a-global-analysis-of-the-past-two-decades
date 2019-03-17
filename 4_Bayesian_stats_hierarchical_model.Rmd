@@ -1,0 +1,402 @@
+---
+title: "Main Bayesian hierarchical model"
+author: "SS"
+date: "February 02, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r initialization}
+library(rgdal)
+library(R2jags)
+library(ggplot2)
+library(RColorBrewer)
+library(plotrix)
+library(GISTools)
+library(R2OpenBUGS)
+library(dplyr)
+library(viridis)
+```
+
+```{r import and format data}
+# bleaching data
+graphs_directory<-"C:/Users/Shannon/Desktop/Ecoregions/output"
+#graphs_directory="C:/RobsR/Shannon/Bleaching data"
+home <- getwd()
+home<-"C:/Users/Shannon/Desktop/Ecoregions"
+#home="C:/RobsR/Shannon/Bleaching data"
+data <- read.csv(file=file.path(home,"Reef_Check_with_cortad_variables_with_annual_rate_of_SST_change.csv"), header=TRUE, sep=",")
+names(data)[names(data)=="ï..Reef.ID"]<-"Reef.ID"
+diversity<-read.csv(file=file.path(home, "coral_diversity.csv"), header=TRUE, sep=",")
+names(diversity)[1]<-"Ecoregion"
+diversity$Region<-diversity$Ecoregion
+diversity<-diversity[order(diversity$Ecoregion),]
+data <- subset(data, Organism.Code=="Bleaching (% of population)")
+data$Lat <- data$Latitude.Degrees; data$Long <- data$Longitude.Degrees
+
+# calculate bleaching metrics
+data$bleach.prez <- 0
+data$bleach.prez[rowSums(data[c('S1','S2','S3','S4')],na.rm=T) >= 1] <- 1
+data$avg.bleach <- rowSums(data[c('S1','S2','S3','S4')],na.rm=T)/rowSums(!is.na(data[c('S1','S2','S3','S4')]))
+data$avg.bleach[data$avg.bleach < 1] <-0
+
+# temperature
+data$Temp <- data$Temperature_Kelvin - 273.15
+data <- data[!is.na(data$Temperature_Kelvin),]
+
+#subset diversity so that we are only working with the diversity data in ecoregions that we have
+diversity<-subset(diversity, Ecoregion %in% (intersect(as.character(levels(diversity$Ecoregion)), as.character(levels(data$Region)))))
+
+# shapefiles
+###ecor.sg <- readOGR(file.path(home,'data','shapefiles','ecoregion_FixGeom_Simp1km_PC150.shp')) # ecoregions
+###wlrd.p <- readOGR(file.path(home,'data','shapefiles','TM_WORLD_BORDERS_SIMPL_PC150.shp')) # from NASA (https://github.com/nasa/World-Wind-Java) and reprojected with Pacific in center
+ECO <- readOGR(file.path(home,'shapefiles','ecoregion_exportPolygon.shp')) # ecoregions
+wlrd.p <- readOGR(file.path(home,'shapefiles','TM_WORLD_BORDERS_SIMPL_PC150.shp'))
+
+
+# predictors by ecoregion
+ecor_data <- read.csv(file.path(home,"EcoRegions_mean_variables.csv"))
+
+setwd(home)
+source(file= "MyBUGSOutput.R")
+
+```
+
+```{r get rid of the holes in the polygon shapefiles}
+ecos_list<-c()
+for (i in 1:150){
+  eco_i<-Polygons((Filter(function(f){f@ringDir==1}, ECO@polygons[[i]]@Polygons)), ID=i)
+  ecos_list<-append(ecos_list, values=eco_i, after = length(ecos_list))
+  #include a brief pause because if running in Rstudio, it takes a while for the code to run and for the value to be loaded into the global environment. If there is no pause, the next iteration of the loop starts before the previous value is fully saved and loaded into the environment, and there can be errors in the shapefile 
+  Sys.sleep(.2)
+}
+ecos<-SpatialPolygons(ecos_list)
+
+ecos$ERG<-ECO$ERG
+ecos$Ecoregion<-ECO$Ecoregion
+ecos@proj4string<-ECO@proj4string
+ecos@plotOrder<-ECO@plotOrder
+ecos@data<-ECO@data
+
+ECO<-ecos
+```
+
+# Figure 1
+```{r Figure 1}
+#pal <- c( "#3B9AB2","#6BB0C0", "#78B7C5", "gold", "#EBCC2A", "#E1AF00","darkorange", "#F21A00", "darkred")
+pal<-viridis(9)
+#pal_legend<-c("white", pal)
+tiff(file=file.path(home,'output','Figure1_Final_viridis.tif'),height=800,width=3000,res=300)
+par(mgp=c(0.5,0.6,0), mar=c(1,1,1,1))
+plot(wlrd.p,ylim=c(-4400000,4400000),xlim=c(-2000000,2000000), col='grey90',border='grey70')
+axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60°','180°','-60° '),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23°','0°','-23°'),las=3,tcl=0.35,mgp=c(-2,-1.3,0),hadj=.4)
+axis(3,at=c(-10018754.17,3339584.724,16697920),lab=c('','',''),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(4, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('','',''),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
+box()
+
+xy <- data[data$avg.bleach == 0,c('Long','Lat')]
+xy <- SpatialPointsDataFrame(data=xy,coords=xy[c('Long','Lat')], proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+xy <- spTransform(xy,CRS("+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+points(xy, cex=.7)
+
+temp <- subset(data, avg.bleach > 0)
+temp <- temp[with(temp, order(temp$avg.bleach)),]
+xy <- temp[c('Long','Lat')]
+xy <- SpatialPointsDataFrame(data=xy,coords=xy[c('Long','Lat')], proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"))
+xy <- spTransform(xy,CRS("+proj=eqc +lat_ts=0 +lat_0=0 +lon_0=150 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+points(xy, cex=.7)
+points(xy, cex=.9, pch=19, col=pal[temp$avg.bleach])
+windowsFonts(A=windowsFont('Arial Unicode MS'))
+text(-7868896,-2922012,'Indian Ocean',cex=1.0, family='A')
+text(9438742,487176,'Pacific Ocean',cex=1.0, family='A')
+north.arrow(x=(-16654136+111319.4*320), y=1615153*2, len=(111319.4*2), lab="N", cex=.7)
+
+#legend
+plotrix::color.legend(9684797.171+25e5,-28*111319.4666666667,15807371.62+25e5,-23.5*111319.4666666667,legend=c(1,100),rect.col=pal,cex=1)
+points(9239521.171+25e5,-25.75*111319.4666666667,lwd=1.5)
+text(9239521.171+25e5,-20.3*111319.4666666667,'0')
+text(((15807371.62+25e5)-(9684797.171+25e5))/2+(9684797.171+25e5),-18*111319.4666666667,"Bleaching %")
+dev.off()
+
+```
+write.csv(data, file = file.path(home,'output','data_for_hierarchical_model.csv'),row.names=T)
+
+# Figure 2
+```{r Figure 2}
+data <- data[!is.na(data$Diversity),]
+
+# standardize explanatory variables
+X_raw <- data[c('Latitude.Degrees','Year','Depth','ClimSST','Temperature_Kelvin','Temperature_Maximum','Temperature_Kelvin_Standard_Deviation','SSTA','SSTA_Minimum','SSTA_Maximum','SSTA_DHW','SSTA_Frequency','SSTA_Frequency_Standard_Deviation','TSA_Frequency','TSA_Frequency_Standard_Deviation','TSA_DHW_Standard_Deviation','rate_of_SST_change')]
+X_raw$Latitude.Degrees <- abs(X_raw$Latitude.Degrees)
+
+standardize_function<-function(x){
+  x.standardized=(x-mean(na.omit(x)))/sd(na.omit(x))
+  return(x.standardized)
+}
+
+diversity$diversity.standardized<-standardize_function(diversity$SpeciesAccepted)
+
+#Latitude
+X_raw$Latitude<-abs(X_raw$Latitude.Degrees)
+X_raw<-subset(X_raw, select=-c(Latitude.Degrees))
+
+X_standardized <- X_raw; for(i in 1:ncol(X_raw)) X_standardized[,i] <- standardize_function(X_raw[,i])
+
+# get the ecoregion that each site belongs to
+data$Reef.ID <- as.factor(as.character(data$Reef.ID))
+sites_and_region_df <- data %>% distinct(Reef.ID, Region) %>% ungroup()
+sites_and_region_df <-left_join(sites_and_region_df,diversity[,c('Region','diversity.standardized')],by='Region')
+str(sites_and_region_df)
+summary(sites_and_region_df)
+
+X <- model.matrix(~ Latitude + Year + 
+                    Depth + ClimSST + 
+                    Temperature_Kelvin + 
+                    Temperature_Maximum + 
+                    Temperature_Kelvin_Standard_Deviation + 
+                    SSTA + 
+                    SSTA_Minimum + SSTA_Maximum + 
+                    SSTA_DHW + SSTA_Frequency + 
+                    SSTA_Frequency_Standard_Deviation + 
+                    TSA_Frequency + 
+                    TSA_Frequency_Standard_Deviation + 
+                    TSA_DHW_Standard_Deviation +
+                    rate_of_SST_change, 
+                  data =X_standardized)
+
+K <- ncol(X)
+
+sites_and_region_df$site <- as.numeric(as.factor(sites_and_region_df$Reef.ID))
+sites_and_region_df$region <- as.numeric(as.factor(sites_and_region_df$Region))
+data <- left_join(data,sites_and_region_df,by='Reef.ID')
+str(data)
+
+#subset diversity so that we are only working with the diversity data in ecoregions that we have
+diversity<-subset(diversity, Region %in% (intersect(as.character(levels(diversity$Region)), as.character(levels(data$Region.x)))))
+diversity$region<-as.factor(as.character(diversity$Region))
+diversity$region <- as.numeric(as.factor(diversity$region))
+diversity<-diversity[order(diversity$region),]
+
+win.data <- list(Y    = round(data$avg.bleach,0),
+                 N    = nrow(data),
+                 X    = X,
+                 K    = K,
+                 Site = data$site, #Random effects identification 
+                 R    = length(unique(data$region)),
+                 J    = length(unique(data$site)),
+                 diversity=diversity$diversity.standardized,
+                 region_for_each_site = sites_and_region_df$region
+)
+
+# JAGS model code
+sink("GLMM.txt")
+cat("
+    model{
+    #1. Priors
+    for (i in 1:K) { beta[i]  ~ dnorm(0, 0.001) }
+    
+    #Prior for tau_Site
+    sigma_Site ~ dgamma(0.001, 0.001)
+    tau_site <- 1 / (sigma_Site * sigma_Site)
+    
+    #Prior for tau_ecoregion
+    sigma_ecoregion ~ dgamma(0.001, 0.001)
+    tau_ecoregion <- 1 / (sigma_ecoregion * sigma_ecoregion)
+    
+    #Priors for k (size)
+    size ~ dunif(0, 20)
+    
+    # Hierarchical effects
+    for(j in 1:J){ # J is total number of sites
+    a[j] ~ dnorm(ecoregion[region_for_each_site[j]],tau_site) # each site is drawn from each ecoregion
+    }
+    
+    for(z in 1:R){ # R is total number of ecoregions
+    ecoregion[z] ~ dnorm(g[z],tau_ecoregion) # each ecoregion mean is drawn from a distribution with a global mean
+    g[z] <- mu_global + beta_diversity*diversity[z]  #where diversity was added to data and is the same length as ecoregion
+    #g[z] <- mu_global
+    }
+    
+    mu_global ~ dnorm(0, 0.001) # prior for global mean
+    beta_diversity ~ dnorm(0, 0.001) #prior for the slope for diversity
+    
+    #2. Likelihood
+    for (i in 1:N) {
+    Y[i] ~  dnegbin(p[i], size)
+    p[i] <- size / (size + mu[i]) 
+    log(mu[i]) <- eta[i]
+    eta[i]     <- inprod(beta[], X[i,]) + a[Site[i]]
+    
+    #3. Model checks
+    #Pearson residuals
+    Exp[i] <- mu[i]
+    Var[i] <- mu[i] + mu[i] * mu[i] / size
+    E[i]   <- (Y[i]  - Exp[i]) / sqrt(Var[i])
+    
+    #Simulated data with mean/variance taken from the fitted model
+    #See text under block B, below.
+    YNew[i] ~  dnegbin(p[i], size)                     
+    
+    #Pearson residual for predicted data     
+    ENew[i] <- (YNew[i] - Exp[i]) / sqrt(Var[i])
+    
+    #Squared residuals
+    D[i]    <- pow(E[i], 2)
+    DNew[i] <- pow(ENew[i], 2)
+    }         
+    
+    #Sum of squared Pearson residuals:
+    Fit     <- sum(D[1:N])
+    #Sum of squared predicted Pearson residuals:  
+    FitNew  <- sum(DNew[1:N]) 
+    
+    #Posterior predictive checks
+    Y.mean <- mean(Y[])
+    YNew.mean <- mean(YNew[])
+    pval.mean <- step(YNew.mean-Y.mean) 
+    
+    #R-squared
+    varF <- sd(Y)^2
+    varE <- sd(Y - YNew)^2
+    R2 <- varF/(varF+varE)  
+    }
+    ",fill = TRUE)
+sink()
+
+# run model
+inits  <- function () {
+  list(beta = rnorm(ncol(X), 0, 0.1),
+       sigma_Site = runif(1, 0, 1), 
+       sigma_ecoregion = runif(1, 0, 1), 
+       mu_global = rnorm(1,0,1), 
+       beta_diversity = rnorm(1, 0, 0.1),
+       size = runif(1, 0, 20) )}
+
+params <- c("beta", "E", "Fit", "FitNew", "YNew", "pval.mean", "R2", "beta_diversity")
+#params <- c("beta", "E", "Fit", "FitNew", "YNew", "pval.mean", "R2")
+
+G1 <- jags(data       = win.data,
+           inits      = inits,
+           parameters = params,
+           model      = "GLMM.txt",
+           n.thin     = 1,
+           n.chains   = 3,
+           n.burnin   = 4000,
+           n.iter     = 5000)
+
+saveRDS(G1, file='model_out.Rdata')
+
+# coef plot ---------------------------------------------------------------
+
+vars <- c("beta[2]","beta[3]","beta[4]","beta[5]", "beta[6]", "beta[7]", "beta[8]", "beta[9]", "beta[10]", "beta[11]", "beta[12]", "beta[13]", "beta[14]", "beta[15]", "beta[16]", "beta[17]","beta[18]","beta_diversity")
+#vars <- c("beta[2]","beta[3]","beta[4]","beta[5]", "beta[6]", "beta[7]", "beta[8]", "beta[9]", "beta[10]", "beta[11]", "beta[12]", "beta[13]", "beta[14]", "beta[15]", "beta[16]", "beta[17]","beta[18]")
+
+OUT1 <- MyBUGSOutput(G1$BUGSoutput, vars)
+print(OUT1, digits =3)
+# summary(G1)
+
+# coef plot
+G2_df=data.frame(variableG2=c("Latitude", "Year", "Depth", "ClimSST", "SST", "SST_Max", "SST_stdev", "SSTA", "SSTA_Min", "SSTA_Max", "SSTA_DHW", "SSTA_Freq", "SSTA_Freq_stdev", "TSA_Freq", "TSA_Freq_stdev", "TSA_DHW_stdev", "Rate_of_SST_change","Diversity"),MeanG2=OUT1[,1],Down=OUT1[,3],Up=OUT1[,4], Down_quarter=OUT1[,5], Up_quarter=OUT1[,6])
+#G2_df=data.frame(variableG2=c("Latitude", "Year", "Depth", "ClimSST", "SST", "SST_Max", "SST_stdev", "SSTA", "SSTA_Min", "SSTA_Max", "SSTA_DHW", "SSTA_Freq", "SSTA_Freq_stdev", "TSA_Freq", "TSA_Freq_stdev", "TSA_DHW_stdev", "Rate_of_SST_change"),MeanG2=OUT1[,1],Down=OUT1[,3],Up=OUT1[,4], Down_quarter=OUT1[,5], Up_quarter=OUT1[,6])
+#write.csv(G2_df, file = file.path(home,'output','beta_est.csv'),row.names=F)
+#G2_df<-read.csv(file.path(home,'output','beta_est.csv'))
+G2_df$color <- ("white")
+G2_df$color[(G2_df$MeanG2 > 0) & (G2_df$Down>0)] <- 'red'
+G2_df$color[(G2_df$MeanG2 < 0) & (G2_df$Up<0)] <- 'blue'
+
+library(ggplot2)
+tiff(file='Figure_2_Final.tif',height=2000,width=2700,res=300)
+ggplot(G2_df,aes(x=reorder(variableG2, MeanG2), MeanG2)) +
+  geom_errorbar(aes(ymax=G2_df$Up, ymin=G2_df$Down), width=0) +
+  geom_errorbar(aes(ymax=G2_df$Up_quarter, ymin=G2_df$Down_quarter), width=0, size=1.3) +
+  geom_point(pch=21, size=3, fill=G2_df$color, color="black") +
+  coord_flip() +
+  theme_grey(base_size=15) +
+  guides(colour=FALSE)+
+  geom_hline(yintercept=0, linetype="dashed", color="gray") +
+  labs(y=expression(paste("Estimated ",gamma," coefficients")), x="")
+dev.off()
+```
+
+# Figure 3 ----------------------------------------------------------------
+```{percent bleaching and probability bleaching over time}
+Bpresent <- subset(data, Average_bleaching > 0) 
+Bpres1999 <- subset(Bpresent, Year > 1999) 
+Bpres2002 <- subset(Bpresent, Year > 2001) 
+
+plot(Average_bleaching ~ Year, data=Bpres2002)
+plot(Average_bleaching ~ as.factor(Year), data=Bpres2002)
+
+tglm <- glm.nb(Average_bleaching ~ as.factor(Year), data=Bpres2002)
+newdat <- data.frame(Year=as.factor(unique(Bpres2002$Year)))
+tglm.pred <- predict(tglm,newdata=newdat,se.fit=T)
+plot(as.numeric(newdat$Year),tglm.pred$fit,type='p')
+plotCI(as.numeric(newdat$Year),tglm.pred$fit,ui=tglm.pred$fit+1.96*tglm.pred$se.fit,li=tglm.pred$fit-1.96*tglm.pred$se.fit)
+
+tglm <- glm.nb(Average_bleaching ~ as.numeric(Year), data=Bpres2002)
+summary(tglm)
+tglm.pred <- predict(tglm,newdata=newdat,se.fit=T)
+plot(Average_bleaching ~ as.numeric(as.factor(Bpres2002$Year)), data=Bpres2002)
+points(as.numeric(newdat$Year),tglm.pred$fit,type='l',col='red')
+
+all2002 <- subset(data, Year > 2001)
+all2002$Year.num <- as.numeric(as.factor(all2002$Year))
+tglm <- glm(bleach.prez ~ Year.num,family='binomial', data=all2002)
+summary(tglm)
+newdat <- data.frame(Year.num=unique(all2002$Year.num),Year=unique(all2002$Year))
+newdat <- arrange(newdat,Year)
+tglm.pred <- predict(tglm,newdata=newdat[c('Year.num')],se.fit=T)
+library(boot)
+plot(newdat$Year,inv.logit(tglm.pred$fit),type='l',col='red')
+
+tiff(file='Figure_3_Final.tif',height=1800,width=2200,res=300)
+par(mfrow=c(1,1),mgp=c(2.2,0.7,0),mar=c(3.5,3.5,2,3.5))
+plot(Average_bleaching ~ as.factor(Year), data=Bpres2002, outline=FALSE, lty=1, staplewex=0, boxwex=0.8, boxlwd=1, medlwd=1,col='grey90',xlab='Year',ylab='% Bleaching')
+par(new=T)
+plot(newdat$Year.num,inv.logit(tglm.pred$fit),type='l',col='red',xaxt='n',yaxt='n',lwd=2,ylab='',xlab='',ylim=c(0.25,.7))
+polygon(c(newdat$Year.num,rev(newdat$Year.num)),c(inv.logit(tglm.pred$fit+1.96*tglm.pred$se.fit),rev(inv.logit(tglm.pred$fit-1.96*tglm.pred$se.fit))),border=F,col=rgb(255,0,0,100,max=255))
+axis(4)
+mtext('Probability Bleaching',side=4,line=2)
+dev.off()
+```
+
+# Figure 4 ----------------------------------------------------------------
+```{r probability density bleaching before and after 2007}
+# histogram of temperature at bleaching before and after 2007
+BpresEarly=subset(Bpresent, Year < 2007 & Temp > 24, select=c(Temp, Average_bleaching, Year)) 
+BpresLate=subset(Bpresent, Year >= 2007 & Temp > 24, select=c(Temp, Average_bleaching, Year)) 
+
+tiff(file='Figure4_Final.tif',height=1800,width=4000,res=300)
+hist(BpresEarly$Temp,col=rgb(107,176,192,100,max=255), xlab=expression("Bleaching temperature"~degree~C), ylab= "Probability density", main="", freq=F, ylim= c(0, 0.3), cex.lab=1.5, cex.axis=1.5)
+hist(BpresLate$Temp, freq=F, col=rgb(242,26,0,100,max=255), main="", add=T)
+
+dearly <- fitdistr(BpresEarly$Temp,'weibull')
+x=seq(24,34,.01) 
+y=dweibull(x,dearly$estimate['shape'],dearly$estimate['scale']) # Shape and scale here, 
+lines(x,y, col=rgb(107,176,192,255,max=255), lwd=2)
+
+dlate <- fitdistr(BpresLate$Temp,'weibull')
+y=dweibull(x,dlate$estimate['shape'],dlate$estimate['scale']) # Shape and scale here, 
+lines(x,y, col=rgb(242,26,0,255,max=255), lwd=2)
+dev.off()
+
+#compare means based on normal distribution
+data$period <- NA
+data$period[data$Year < 2007 & data$Temp > 24] <- 'early'
+data$period[data$Year >= 2007 & data$Temp > 24] <- 'late'
+
+summary(lm(data$Temp~as.factor(data$period)))
+
+hist(data$Temp[data$period=='early'],col=rgb(0,0,1,1, alpha=0.3), xlab="Degrees Celsius", ylab= "Probablity density", main="", freq=F, ylim= c(0, 0.3), cex.lab=1.5, cex.axis=1.5)
+hist(data$Temp[data$period=='late'], freq=F, col=rgb(1,0,0,1, alpha=0.3), main="", add=T)
+lines(x,dnorm(x,mean(data$Temp[data$period=='early'],na.rm=T),sd(data$Temp[data$period=='early'],na.rm=T)), col="blue", lwd=2)
+lines(x,dnorm(x,mean(data$Temp[data$period=='late'],na.rm=T),sd(data$Temp[data$period=='late'],na.rm=T)), col="red", lwd=2)
+
+#compare difference in weibull distributions
+poolw <- fitdistr(data$Temp[data$Temp > 24],'weibull')
+logLik_sum <- dearly$loglik + dlate$loglik
+logLik_pooled <- poolw$loglik
+pchisq(2*(logLik_sum-logLik_pooled),df=2,lower.tail=FALSE) 
+```
