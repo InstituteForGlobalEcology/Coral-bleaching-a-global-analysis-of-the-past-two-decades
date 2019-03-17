@@ -1,0 +1,103 @@
+---
+title: "Calculate rate of SST change"
+author: "SS"
+date: "February 02, 2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+#SST rate 1981-2018, 1km x 1km NOAA data
+#data from https://www.esrl.noaa.gov/psd/data/gridded/data.noaa.oisst.v2.html 
+#source file from ftp://ftp.cdc.noaa.gov/Datasets/noaa.oisst.v2/sst.mnmean.nc
+```{r initialization}
+library(raster)
+#set working directory
+working_directory="C:/Users/Shannon/Desktop/Ecoregions"
+setwd(working_directory)
+
+#read in the NOAA SST data
+sst<-stack('sst.mnmean.nc')
+
+#read in the Reef Check data with CoRTAD variables
+RC <- read.csv(file=file.path(working_directory,"Reef_Check_with_cortad_variables.csv"))
+
+#set directory for your output graphs
+graphs_directory<-"C:/Users/Shannon/Desktop/Ecoregions/output"
+```
+
+```{r average the rasters per year}
+r1982<-mean(stack(sst$X1982.01.01,sst$X1982.02.01,sst$X1982.03.01,sst$X1982.04.01,sst$X1982.05.01,sst$X1982.06.01,sst$X1982.07.01,sst$X1982.08.01,sst$X1982.09.01,sst$X1982.10.01,sst$X1982.11.01,sst$X1982.12.01))
+r1983<-mean(stack(sst$X1983.01.01,sst$X1983.02.01,sst$X1983.03.01,sst$X1983.04.01,sst$X1983.05.01,sst$X1983.06.01,sst$X1983.07.01,sst$X1983.08.01,sst$X1983.09.01,sst$X1983.10.01,sst$X1983.11.01,sst$X1983.12.01))
+r1984<-mean(stack(sst$X1984.01.01,sst$X1984.02.01,sst$X1984.03.01,sst$X1984.04.01,sst$X1984.05.01,sst$X1984.06.01,sst$X1984.07.01,sst$X1984.08.01,sst$X1984.09.01,sst$X1984.10.01,sst$X1984.11.01,sst$X1984.12.01))
+r1985<-mean(stack(sst$X1985.01.01,sst$X1985.02.01,sst$X1985.03.01,sst$X1985.04.01,sst$X1985.05.01,sst$X1985.06.01,sst$X1985.07.01,sst$X1985.08.01,sst$X1985.09.01,sst$X1985.10.01,sst$X1985.11.01,sst$X1985.12.01))
+r1986<-mean(stack(sst$X1986.01.01,sst$X1986.02.01,sst$X1986.03.01,sst$X1986.04.01,sst$X1986.05.01,sst$X1986.06.01,sst$X1986.07.01,sst$X1986.08.01,sst$X1986.09.01,sst$X1986.10.01,sst$X1986.11.01,sst$X1986.12.01))
+r1987<-mean(stack(sst$X1987.01.01,sst$X1987.02.01,sst$X1987.03.01,sst$X1987.04.01,sst$X1987.05.01,sst$X1987.06.01,sst$X1987.07.01,sst$X1987.08.01,sst$X1987.09.01,sst$X1987.10.01,sst$X1987.11.01,sst$X1987.12.01))
+r1988<-mean(stack(sst$X1988.01.01,sst$X1988.02.01,sst$X1988.03.01,sst$X1988.04.01,sst$X1988.05.01,sst$X1988.06.01,sst$X1988.07.01,sst$X1988.08.01,sst$X1988.09.01,sst$X1988.10.01,sst$X1988.11.01,sst$X1988.12.01))
+r1989<-mean(stack(sst$X1989.01.01,sst$X1989.02.01,sst$X1989.03.01,sst$X1989.04.01,sst$X1989.05.01,sst$X1989.06.01,sst$X1989.07.01,sst$X1989.08.01,sst$X1989.09.01,sst$X1989.10.01,sst$X1989.11.01,sst$X1989.12.01))
+
+r1990<-mean(stack(sst$X1990.01.01,sst$X1990.02.01,sst$X1990.03.01,sst$X1990.04.01,sst$X1990.05.01,sst$X1990.06.01,sst$X1990.07.01,sst$X1990.08.01,sst$X1990.09.01,sst$X1990.10.01,sst$X1990.11.01,sst$X1990.12.01))
+r1991<-mean(stack(sst$X1991.01.01,sst$X1991.02.01,sst$X1991.03.01,sst$X1991.04.01,sst$X1991.05.01,sst$X1991.06.01,sst$X1991.07.01,sst$X1991.08.01,sst$X1991.09.01,sst$X1991.10.01,sst$X1991.11.01,sst$X1991.12.01))
+r1992<-mean(stack(sst$X1992.01.01,sst$X1992.02.01,sst$X1992.03.01,sst$X1992.04.01,sst$X1992.05.01,sst$X1992.06.01,sst$X1992.07.01,sst$X1992.08.01,sst$X1992.09.01,sst$X1992.10.01,sst$X1992.11.01,sst$X1992.12.01))
+r1993<-mean(stack(sst$X1993.01.01,sst$X1993.02.01,sst$X1993.03.01,sst$X1993.04.01,sst$X1993.05.01,sst$X1993.06.01,sst$X1993.07.01,sst$X1993.08.01,sst$X1993.09.01,sst$X1993.10.01,sst$X1993.11.01,sst$X1993.12.01))
+r1994<-mean(stack(sst$X1994.01.01,sst$X1994.02.01,sst$X1994.03.01,sst$X1994.04.01,sst$X1994.05.01,sst$X1994.06.01,sst$X1994.07.01,sst$X1994.08.01,sst$X1994.09.01,sst$X1994.10.01,sst$X1994.11.01,sst$X1994.12.01))
+r1995<-mean(stack(sst$X1995.01.01,sst$X1995.02.01,sst$X1995.03.01,sst$X1995.04.01,sst$X1995.05.01,sst$X1995.06.01,sst$X1995.07.01,sst$X1995.08.01,sst$X1995.09.01,sst$X1995.10.01,sst$X1995.11.01,sst$X1995.12.01))
+r1996<-mean(stack(sst$X1996.01.01,sst$X1996.02.01,sst$X1996.03.01,sst$X1996.04.01,sst$X1996.05.01,sst$X1996.06.01,sst$X1996.07.01,sst$X1996.08.01,sst$X1996.09.01,sst$X1996.10.01,sst$X1996.11.01,sst$X1996.12.01))
+r1997<-mean(stack(sst$X1997.01.01,sst$X1997.02.01,sst$X1997.03.01,sst$X1997.04.01,sst$X1997.05.01,sst$X1997.06.01,sst$X1997.07.01,sst$X1997.08.01,sst$X1997.09.01,sst$X1997.10.01,sst$X1997.11.01,sst$X1997.12.01))
+r1998<-mean(stack(sst$X1998.01.01,sst$X1998.02.01,sst$X1998.03.01,sst$X1998.04.01,sst$X1998.05.01,sst$X1998.06.01,sst$X1998.07.01,sst$X1998.08.01,sst$X1998.09.01,sst$X1998.10.01,sst$X1998.11.01,sst$X1998.12.01))
+r1999<-mean(stack(sst$X1999.01.01,sst$X1999.02.01,sst$X1999.03.01,sst$X1999.04.01,sst$X1999.05.01,sst$X1999.06.01,sst$X1999.07.01,sst$X1999.08.01,sst$X1999.09.01,sst$X1999.10.01,sst$X1999.11.01,sst$X1999.12.01))
+
+r2000<-mean(stack(sst$X2000.01.01,sst$X2000.02.01,sst$X2000.03.01,sst$X2000.04.01,sst$X2000.05.01,sst$X2000.06.01,sst$X2000.07.01,sst$X2000.08.01,sst$X2000.09.01,sst$X2000.10.01,sst$X2000.11.01,sst$X2000.12.01))
+r2001<-mean(stack(sst$X2001.01.01,sst$X2001.02.01,sst$X2001.03.01,sst$X2001.04.01,sst$X2001.05.01,sst$X2001.06.01,sst$X2001.07.01,sst$X2001.08.01,sst$X2001.09.01,sst$X2001.10.01,sst$X2001.11.01,sst$X2001.12.01))
+r2002<-mean(stack(sst$X2002.01.01,sst$X2002.02.01,sst$X2002.03.01,sst$X2002.04.01,sst$X2002.05.01,sst$X2002.06.01,sst$X2002.07.01,sst$X2002.08.01,sst$X2002.09.01,sst$X2002.10.01,sst$X2002.11.01,sst$X2002.12.01))
+r2003<-mean(stack(sst$X2003.01.01,sst$X2003.02.01,sst$X2003.03.01,sst$X2003.04.01,sst$X2003.05.01,sst$X2003.06.01,sst$X2003.07.01,sst$X2003.08.01,sst$X2003.09.01,sst$X2003.10.01,sst$X2003.11.01,sst$X2003.12.01))
+r2004<-mean(stack(sst$X2004.01.01,sst$X2004.02.01,sst$X2004.03.01,sst$X2004.04.01,sst$X2004.05.01,sst$X2004.06.01,sst$X2004.07.01,sst$X2004.08.01,sst$X2004.09.01,sst$X2004.10.01,sst$X2004.11.01,sst$X2004.12.01))
+r2005<-mean(stack(sst$X2005.01.01,sst$X2005.02.01,sst$X2005.03.01,sst$X2005.04.01,sst$X2005.05.01,sst$X2005.06.01,sst$X2005.07.01,sst$X2005.08.01,sst$X2005.09.01,sst$X2005.10.01,sst$X2005.11.01,sst$X2005.12.01))
+r2006<-mean(stack(sst$X2006.01.01,sst$X2006.02.01,sst$X2006.03.01,sst$X2006.04.01,sst$X2006.05.01,sst$X2006.06.01,sst$X2006.07.01,sst$X2006.08.01,sst$X2006.09.01,sst$X2006.10.01,sst$X2006.11.01,sst$X2006.12.01))
+r2007<-mean(stack(sst$X2007.01.01,sst$X2007.02.01,sst$X2007.03.01,sst$X2007.04.01,sst$X2007.05.01,sst$X2007.06.01,sst$X2007.07.01,sst$X2007.08.01,sst$X2007.09.01,sst$X2007.10.01,sst$X2007.11.01,sst$X2007.12.01))
+r2008<-mean(stack(sst$X2008.01.01,sst$X2008.02.01,sst$X2008.03.01,sst$X2008.04.01,sst$X2008.05.01,sst$X2008.06.01,sst$X2008.07.01,sst$X2008.08.01,sst$X2008.09.01,sst$X2008.10.01,sst$X2008.11.01,sst$X2008.12.01))
+r2009<-mean(stack(sst$X2009.01.01,sst$X2009.02.01,sst$X2009.03.01,sst$X2009.04.01,sst$X2009.05.01,sst$X2009.06.01,sst$X2009.07.01,sst$X2009.08.01,sst$X2009.09.01,sst$X2009.10.01,sst$X2009.11.01,sst$X2009.12.01))
+
+r2010<-mean(stack(sst$X2010.01.01,sst$X2010.02.01,sst$X2010.03.01,sst$X2010.04.01,sst$X2010.05.01,sst$X2010.06.01,sst$X2010.07.01,sst$X2010.08.01,sst$X2010.09.01,sst$X2010.10.01,sst$X2010.11.01,sst$X2010.12.01))
+r2011<-mean(stack(sst$X2011.01.01,sst$X2011.02.01,sst$X2011.03.01,sst$X2011.04.01,sst$X2011.05.01,sst$X2011.06.01,sst$X2011.07.01,sst$X2011.08.01,sst$X2011.09.01,sst$X2011.10.01,sst$X2011.11.01,sst$X2011.12.01))
+r2012<-mean(stack(sst$X2012.01.01,sst$X2012.02.01,sst$X2012.03.01,sst$X2012.04.01,sst$X2012.05.01,sst$X2012.06.01,sst$X2012.07.01,sst$X2012.08.01,sst$X2012.09.01,sst$X2012.10.01,sst$X2012.11.01,sst$X2012.12.01))
+r2013<-mean(stack(sst$X2013.01.01,sst$X2013.02.01,sst$X2013.03.01,sst$X2013.04.01,sst$X2013.05.01,sst$X2013.06.01,sst$X2013.07.01,sst$X2013.08.01,sst$X2013.09.01,sst$X2013.10.01,sst$X2013.11.01,sst$X2013.12.01))
+r2014<-mean(stack(sst$X2014.01.01,sst$X2014.02.01,sst$X2014.03.01,sst$X2014.04.01,sst$X2014.05.01,sst$X2014.06.01,sst$X2014.07.01,sst$X2014.08.01,sst$X2014.09.01,sst$X2014.10.01,sst$X2014.11.01,sst$X2014.12.01))
+r2015<-mean(stack(sst$X2015.01.01,sst$X2015.02.01,sst$X2015.03.01,sst$X2015.04.01,sst$X2015.05.01,sst$X2015.06.01,sst$X2015.07.01,sst$X2015.08.01,sst$X2015.09.01,sst$X2015.10.01,sst$X2015.11.01,sst$X2015.12.01))
+r2016<-mean(stack(sst$X2016.01.01,sst$X2016.02.01,sst$X2016.03.01,sst$X2016.04.01,sst$X2016.05.01,sst$X2016.06.01,sst$X2016.07.01,sst$X2016.08.01,sst$X2016.09.01,sst$X2016.10.01,sst$X2016.11.01,sst$X2016.12.01))
+r2017<-mean(stack(sst$"X2017.01.01",sst$"X2017.02.01",sst$"X2017.03.01" ,sst$"X2017.04.01" ,sst$"X2017.05.01" ,sst$"X2017.06.01" ,sst$"X2017.07.01" ,sst$"X2017.08.01" ,sst$"X2017.09.01",sst$"X2017.10.01" ,sst$"X2017.11.01" ,sst$"X2017.12.01"))
+#for some reason, 2017 has quotation marks around each month's raster file, so that is why r2017 looks slighly different above when we calculate the mean. This is not a typo in my code.
+```
+
+```{r calculate rate, plot on map, and write rasters}
+#Calculate rate of change using years 1984 and 2017. We did not want to select ENSO years when doing the calculation. Treat the timeframe as if it were mid 1984 to mid 2017 instead of beginning of 1984 and end of 2017, because we are using the mean value for each year
+rate<-(r2017-r1984)/33  
+rate<-rotate(rate)
+
+#visualize the SST rate of change
+setwd(graphs_directory)
+tiff(paste("SST_rate.tif", sep=""),res=300,width=2600,height=1000)
+par(mgp=c(0.01,0.01,0), mar=c(1,1,1,1))
+plot(rate)
+library(rworldmap)
+data(coastsCoarse)
+data(countriesLow)
+plot(coastsCoarse, add=T)
+plot(countriesLow, add = T)
+dev.off()
+
+#write a raster file of the rate of sst change
+setwd(working_directory)
+writeRaster(rate,'SST rate')
+```
+
+```{r gather SST rate of change for the Reef_Check_with_cortad_variables.csv}
+library(raster)
+setwd(working_directory)
+#make spatial points data frame from the Reef Check data
+coordinates(RC)<-~Longitude.Degrees+Latitude.Degrees 
+
+#For each Reef Check survey, get the corresponding rate of SST change
+SST_rate_of_change<-raster::extract(rate, RC)
+write.csv(SST_rate_of_change, "SST_rate_of_change_NOAA_1_km_res.csv")
+```
