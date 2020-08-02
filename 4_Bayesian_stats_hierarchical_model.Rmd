@@ -27,7 +27,7 @@ home <- getwd()
 home<-"C:/Users/Shannon/Desktop/Ecoregions"
 #home="C:/RobsR/Shannon/Bleaching data"
 data <- read.csv(file=file.path(home,"Reef_Check_with_cortad_variables_with_annual_rate_of_SST_change.csv"), header=TRUE, sep=",")
-names(data)[names(data)=="ï..Reef.ID"]<-"Reef.ID"
+names(data)[names(data)=="Ã¯..Reef.ID"]<-"Reef.ID"
 diversity<-read.csv(file=file.path(home, "coral_diversity.csv"), header=TRUE, sep=",")
 names(diversity)[1]<-"Ecoregion"
 diversity$Region<-diversity$Ecoregion
@@ -90,8 +90,8 @@ pal<-viridis(9)
 tiff(file=file.path(home,'output','Figure1_Final_viridis.tif'),height=800,width=3000,res=300)
 par(mgp=c(0.5,0.6,0), mar=c(1,1,1,1))
 plot(wlrd.p,ylim=c(-4400000,4400000),xlim=c(-2000000,2000000), col='grey90',border='grey70')
-axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60°','180°','-60° '),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
-axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23°','0°','-23°'),las=3,tcl=0.35,mgp=c(-2,-1.3,0),hadj=.4)
+axis(1,at=c(-10018754.17,3339584.724,16697920),lab=c('60Â°','180Â°','-60Â° '),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
+axis(2, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('23Â°','0Â°','-23Â°'),las=3,tcl=0.35,mgp=c(-2,-1.3,0),hadj=.4)
 axis(3,at=c(-10018754.17,3339584.724,16697920),lab=c('','',''),las=1,tcl=0.35,mgp=c(-1,-1.3,0))
 axis(4, at=c(23*111319.4666666667,0,-23*111319.4666666667),labels=c('','',''),las=2,tcl=0.35,mgp=c(-1,-0.6,0),hadj=0)
 box()
@@ -321,7 +321,7 @@ dev.off()
 ```
 
 # Figure 3 ----------------------------------------------------------------
-```{percent bleaching and probability bleaching over time}
+```{r percent bleaching and probability bleaching over time}
 Bpresent <- subset(data, Average_bleaching > 0) 
 Bpres1999 <- subset(Bpresent, Year > 1999) 
 Bpres2002 <- subset(Bpresent, Year > 2001) 
