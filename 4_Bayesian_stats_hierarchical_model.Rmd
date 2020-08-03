@@ -322,7 +322,18 @@ dev.off()
 
 # Figure 3 ----------------------------------------------------------------
 ```{r percent bleaching and probability bleaching over time}
-Bpresent <- subset(data, Average_bleaching > 0) 
+Bleaching_data_directory="C:/Users/Shannon/Desktop/Ecoregions"
+Bleaching_Data <- read.csv(file="Reef_Check_with_cortad_variables.csv", header=TRUE, sep=",")
+Bleaching_Data=subset(Bleaching_Data, Organism.Code=="Bleaching (% of population)")
+# calculate bleaching metrics
+Bleaching_Data$bleach.prez <- 0
+Bleaching_Data$bleach.prez[rowSums(data[c('S1','S2','S3','S4')],na.rm=T) >= 1] <- 1
+Bleaching_Data$avg.bleach <- rowSums(Bleaching_Data[c('S1','S2','S3','S4')],na.rm=T)/rowSums(!is.na(Bleaching_Data[c('S1','S2','S3','S4')]))
+Bleaching_Data$avg.bleach[Bleaching_Data$avg.bleach < 1] <-0
+Bleaching_Data$Average_bleaching<-Bleaching_Data$avg.bleach
+
+
+Bpresent <- subset(Bleaching_Data, Average_bleaching > 0) 
 Bpres1999 <- subset(Bpresent, Year > 1999) 
 Bpres2002 <- subset(Bpresent, Year > 2001) 
 
@@ -370,15 +381,21 @@ write.csv(boxplot_values, file = file.path(home,'output','Fig_3_boxplot_values.c
 #equation for the probability bleaching line, expressed as if we are really using years on the x-axis.
 slope<- as.numeric(inv.logit(tglm.pred$fit)[length(inv.logit(tglm.pred$fit))]-inv.logit(tglm.pred$fit)[1])/(newdat$Year.num[length(newdat$Year.num)]-newdat$Year.num[1])
 y_intercept<- as.numeric(inv.logit(tglm.pred$fit)[1]-slope*(2002-0)) #y=slope*x+y_intercept
-#y=0.00361515*x-6.924503
+#y=y=0.00385387*x-7.410694
 
 #the shaded region around the red line does not have an equation. The values here are:
-#lower shaded red region: (inv.logit(tglm.pred$fit-1.96*tglm.pred$se.fit)), which is 2002:0.2940307, 2003:0.2993041, 2004:0.3045403, 2005:0.3096982, 2006:0.3147174, 2007:0.3195110, 2008:0.3239663, 2009:0.3279638, 2010:0.3314256, 2011:0.3343590, 2012:0.3368476, 2013:0.3390014, 2014:0.3409174, 2015:0.3426678, 2016:0.3443022, 2017:0.3458542
-#upper shaded region: inv.logit(tglm.pred$fit+1.96*tglm.pred$se.fit), which is 2002:0.3326708, 2003:0.3342248, 2004:0.3358782, 2005:0.3376709, 2006:0.3396624, 2007:0.3419379, 2008:0.3446091, 2009:0.3477940, 2010:0.3515691, 2011:0.3559255, 2012:0.3607782, 2013:0.3660154, 2014:0.3715384, 2015:0.3772733, 2016:0.3831687, 2017:0.3891891
+#lower shaded red region: (inv.logit(tglm.pred$fit-1.96*tglm.pred$se.fit)), which is 2002:0.2866940, 2003:0.2921338, 2004:0.2975460, 2005:0.3028907, 2006:0.3081089, 2007:0.3131164, 2008:0.3178028, 2009:0.3220507, 2010:0.3257825, 2011:0.3290028, 2012:0.3317917, 2013:0.3342555, 2014:0.3364887, 2015:0.3385617, 2016:0.3405230, 2017:0.3424052
+#upper shaded region: inv.logit(tglm.pred$fit+1.96*tglm.pred$se.fit), which is 2002:0.3241597, 2003:0.3260212, 2004:0.3279807, 2005:0.3300769, 2006:0.3323676, 2007:0.3349356, 2008:0.3378900, 2009:0.3413464, 2010:0.3453812, 2011:0.3499879, 2012:0.3550848, 2013:0.3605637, 2014:0.3663282, 2015:0.3723060, 2016:0.3784468, 2017:0.3847155
 ```
 
 # Figure 4 ----------------------------------------------------------------
 ```{r probability density bleaching before and after 2007}
+data <- read.csv(file=file.path(home,"Reef_Check_with_cortad_variables_with_annual_rate_of_SST_change.csv"), header=TRUE, sep=",")
+data$Temp <- data$Temperature_Kelvin - 273.15
+data<-data[!is.na(data$Temp),]
+data$Average_bleaching[data$Average_bleaching < 1] <-0
+Bpresent <- subset(data, Average_bleaching > 0) 
+
 # histogram of temperature at bleaching before and after 2007
 BpresEarly=subset(Bpresent, Year < 2007 & Temp > 24, select=c(Temp, Average_bleaching, Year)) 
 BpresLate=subset(Bpresent, Year >= 2007 & Temp > 24, select=c(Temp, Average_bleaching, Year)) 
@@ -396,6 +413,7 @@ dlate <- fitdistr(BpresLate$Temp,'weibull')
 y=dweibull(x,dlate$estimate['shape'],dlate$estimate['scale']) # Shape and scale here, 
 lines(x,y, col=rgb(242,26,0,255,max=255), lwd=2)
 dev.off()
+#note: the shape and scale of 'dearly' and 'dlate' are slightly different than what appears in the caption of Fig. 3 in Nat Comms. The difference is negligible and was only mentioned so it can be re-drawn if anyone is interested.
 
 #compare means based on normal distribution
 data$period <- NA
