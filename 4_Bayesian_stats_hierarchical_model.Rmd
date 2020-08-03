@@ -360,6 +360,21 @@ polygon(c(newdat$Year.num,rev(newdat$Year.num)),c(inv.logit(tglm.pred$fit+1.96*t
 axis(4)
 mtext('Probability Bleaching',side=4,line=2)
 dev.off()
+
+#if you want to see what the values are for each section of the boxplot, run this. This prints the lower whisker, lower box bound, median line, upper box bound, and upper whisker for each year. 
+boxplot_values<-as.data.frame(rbind(c(2002, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2002], coef=1.5, do.out=TRUE)$stats), c(2003, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2003], coef=1.5, do.out=TRUE)$stats), c(2004, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2004], coef=1.5, do.out=TRUE)$stats), c(2005, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2005], coef=1.5, do.out=TRUE)$stats), c(2006, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2006], coef=1.5, do.out=TRUE)$stats), c(2007, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2007], coef=1.5, do.out=TRUE)$stats), c(2008, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2008], coef=1.5, do.out=TRUE)$stats), c(2009, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2009], coef=1.5, do.out=TRUE)$stats), c(2010, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2010], coef=1.5, do.out=TRUE)$stats), c(2011, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2011], coef=1.5, do.out=TRUE)$stats), c(2012, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2012], coef=1.5, do.out=TRUE)$stats), c(2013, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2013], coef=1.5, do.out=TRUE)$stats), c(2014, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2014], coef=1.5, do.out=TRUE)$stats), c(2015, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2015], coef=1.5, do.out=TRUE)$stats), c(2016, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2016], coef=1.5, do.out=TRUE)$stats), c(2017, boxplot.stats(Bpres2002$Average_bleaching[Bpres2002$Year==2017], coef=1.5, do.out=TRUE)$stats)))
+colnames(boxplot_values)<-c("year", "lower whisker", "lower box bound", "median", "upper box bound", "upper whisker")
+
+write.csv(boxplot_values, file = file.path(home,'output','Fig_3_boxplot_values.csv'),row.names=F)
+
+#equation for the probability bleaching line, expressed as if we are really using years on the x-axis.
+slope<- as.numeric(inv.logit(tglm.pred$fit)[length(inv.logit(tglm.pred$fit))]-inv.logit(tglm.pred$fit)[1])/(newdat$Year.num[length(newdat$Year.num)]-newdat$Year.num[1])
+y_intercept<- as.numeric(inv.logit(tglm.pred$fit)[1]-slope*(2002-0)) #y=slope*x+y_intercept
+#y=0.00361515*x-6.924503
+
+#the shaded region around the red line does not have an equation. The values here are:
+#lower shaded red region: (inv.logit(tglm.pred$fit-1.96*tglm.pred$se.fit)), which is 2002:0.2940307, 2003:0.2993041, 2004:0.3045403, 2005:0.3096982, 2006:0.3147174, 2007:0.3195110, 2008:0.3239663, 2009:0.3279638, 2010:0.3314256, 2011:0.3343590, 2012:0.3368476, 2013:0.3390014, 2014:0.3409174, 2015:0.3426678, 2016:0.3443022, 2017:0.3458542
+#upper shaded region: inv.logit(tglm.pred$fit+1.96*tglm.pred$se.fit), which is 2002:0.3326708, 2003:0.3342248, 2004:0.3358782, 2005:0.3376709, 2006:0.3396624, 2007:0.3419379, 2008:0.3446091, 2009:0.3477940, 2010:0.3515691, 2011:0.3559255, 2012:0.3607782, 2013:0.3660154, 2014:0.3715384, 2015:0.3772733, 2016:0.3831687, 2017:0.3891891
 ```
 
 # Figure 4 ----------------------------------------------------------------
